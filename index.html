@@ -1,0 +1,1450 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="萤线：你和你的 AI 各牵一根光绳的一头，在毛绒绒的梦境里一起收集萤火虫的双人合作小游戏。">
+<meta property="og:title" content="萤线 Firefly Line">
+<meta property="og:description" content="两个人的一根线。和你的 AI 牵一根光绳，收集萤火虫。">
+<meta property="og:image" content="assets/cover.jpg">
+<style>*,*::before,*::after{box-sizing:border-box}html{color-scheme:light}body{margin:0;font:14px/1.5 system-ui,sans-serif}img{max-width:100%}</style>
+</head>
+<body>
+<title>萤线</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;500&family=Noto+Sans+SC:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+/* Layout: full-bleed furry dream field (canvas). HUD as three quiet corners: score left, the night's progress centre, time right.
+   Title floats in the light on the start screen; one flat cream card after the night. Every chrome element is a flat pill with a hairline. */
+:root{
+  --peach:#ff977a;      /* you */
+  --gold:#ffc85a;       /* golden firefly */
+  --lime:#efffa6;       /* firefly light */
+  --ink:#3e3549;
+  --ink-soft:#7a708a;
+  --hair:rgba(62,53,73,.1);
+  --paper:#fff8f2;
+  --glass:rgba(255,250,244,.16);
+  --glass-line:rgba(255,250,244,.38);
+  --f-display:"Noto Serif SC","Songti SC","STSong",serif;
+  --f-body:"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+  color-scheme:light;
+}
+html,body{height:100%}
+[hidden]{display:none!important}
+body{background:#6f86dc;color:var(--ink);font-family:var(--f-body);overflow:hidden;-webkit-user-select:none;user-select:none}
+canvas{position:fixed;inset:0;display:block;touch-action:none}
+button{font:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:2px solid #fffaf4;outline-offset:3px}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:99px;background:var(--glass);box-shadow:inset 0 0 0 1px var(--glass-line);
+  font-size:12px;letter-spacing:.12em;color:#fffaf4;white-space:nowrap}
+
+/* HUD */
+.hud{position:fixed;left:0;right:0;top:0;display:grid;grid-template-columns:1fr auto 1fr;align-items:start;gap:12px;
+  padding:calc(env(safe-area-inset-top,0px) + 18px) 20px 0;pointer-events:none;transition:opacity .6s;color:#fffaf4}
+.hud[data-off]{opacity:0}
+.corner{display:flex;flex-direction:column;gap:4px}
+.corner.right{align-items:flex-end;text-align:right}
+.lab{display:inline-flex;align-items:center;gap:6px;font-size:11px;letter-spacing:.24em;opacity:.92}
+.lab svg{width:16px;height:16px;flex:none}
+.num{font-family:var(--f-display);font-weight:300;font-size:40px;line-height:1;font-variant-numeric:tabular-nums;transform-origin:0 70%;display:inline-block}
+.num.bump{animation:bump .35s ease}
+@keyframes bump{40%{transform:scale(1.22)}}
+.corner.right .num{font-size:28px;transform-origin:100% 70%}
+.night{display:flex;flex-direction:column;align-items:center;gap:8px;padding-top:4px;min-width:0}
+.phases{display:grid;grid-template-columns:repeat(3,1fr);width:min(240px,42vw);font-size:10px;letter-spacing:.24em;text-align:center}
+.phases span{opacity:.5;transition:opacity .4s}
+.phases span.on{opacity:1}
+.track{position:relative;width:min(240px,42vw);height:4px;display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.track i{display:block;border-radius:2px;background:rgba(255,250,244,.24);overflow:hidden}
+.track i b{display:block;height:100%;width:0;background:#fffaf4;border-radius:2px}
+.moon{position:absolute;top:50%;left:0;width:12px;height:12px;border-radius:50%;background:#fffaf4;transform:translate(-50%,-50%);
+  box-shadow:0 0 0 4px rgba(255,250,244,.22)}
+.chips-row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;min-height:30px}
+.combo b{font-family:var(--f-display);font-weight:500;font-size:16px;letter-spacing:0}
+.combo .dots{display:inline-flex;gap:3px}
+.combo .dots i{width:5px;height:5px;border-radius:50%;background:rgba(255,250,244,.3)}
+.combo .dots i.on{background:var(--lime)}
+.combo.pop{animation:bump .3s ease}
+.item{background:rgba(255,214,110,.18);box-shadow:inset 0 0 0 1px rgba(255,226,150,.55)}
+.item svg{width:14px;height:14px}
+.item b{font-family:var(--f-display);font-weight:500;font-size:15px;letter-spacing:0}
+.status{background:rgba(214,232,255,.22);box-shadow:inset 0 0 0 1px rgba(235,245,255,.6)}
+.free{background:rgba(255,200,90,.22);box-shadow:inset 0 0 0 1px rgba(255,214,120,.6)}
+.free .bar{width:56px;height:3px;border-radius:2px;background:rgba(255,250,244,.3);overflow:hidden}
+.free .bar i{display:block;height:100%;background:var(--gold)}
+.tip{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;padding:0 16px calc(env(safe-area-inset-bottom,0px) + 18px);pointer-events:none;transition:opacity .8s}
+.tip[data-off]{opacity:0}
+.snd{position:fixed;right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 16px);width:38px;height:38px;border-radius:50%;border:0;padding:0;
+  display:grid;place-items:center;color:#fffaf4;background:var(--glass);box-shadow:inset 0 0 0 1px var(--glass-line)}
+.snd svg{width:18px;height:18px}
+.snd .off{display:none}
+.snd[aria-pressed="false"] .on{display:none}
+.snd[aria-pressed="false"] .off{display:block}
+
+/* start screen */
+.overlay{position:fixed;inset:0;display:grid;place-items:center;padding-inline:16px;
+  padding-block:calc(env(safe-area-inset-top,0px) + 16px) calc(env(safe-area-inset-bottom,0px) + 16px);pointer-events:none}
+.intro{pointer-events:auto;display:flex;flex-direction:column;align-items:center;gap:18px;text-align:center;color:#fffaf4;margin-top:-12vh;animation:float 1.4s ease both}
+@keyframes float{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.kicker{font-size:11px;letter-spacing:.42em;padding-left:.42em;opacity:.9;display:flex;align-items:center;gap:12px}
+.kicker::before,.kicker::after{content:"";width:28px;height:1px;background:rgba(255,250,244,.6)}
+.intro h1{font-family:var(--f-display);font-weight:300;font-size:clamp(84px,22vw,136px);letter-spacing:.34em;padding-left:.34em;line-height:1;margin:2px 0 0}
+.lede{margin:0;font-size:15px;letter-spacing:.14em;line-height:1.9}
+.howto{list-style:none;margin:6px 0 0;padding:0;display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.howto svg{width:16px;height:16px;flex:none}
+.glass{margin-top:6px;display:inline-flex;align-items:center;gap:12px;font-family:var(--f-display);font-weight:500;font-size:17px;letter-spacing:.3em;
+  padding:15px 28px 15px calc(30px + .3em);color:var(--ink);background:var(--paper);border:0;border-radius:99px;transition:transform .25s,gap .25s}
+.glass svg{width:18px;height:18px}
+.glass:hover{transform:translateY(-2px);gap:16px}
+.glass:disabled{opacity:.7;transform:none}
+.small{font-size:12px;letter-spacing:.06em;margin:0;max-width:30em;line-height:1.8}
+.small:empty{display:none}
+
+/* bring-your-AI */
+.persona-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center}
+.ghost{font-size:13px;letter-spacing:.14em;color:#fffaf4;background:var(--glass);border:0;border-radius:99px;padding:9px 16px;box-shadow:inset 0 0 0 1px var(--glass-line);transition:background .2s}
+.ghost:hover{background:rgba(255,250,244,.28)}
+.ghost-dark{font-size:13px;color:var(--ink);background:#fff;border:1px solid rgba(62,53,73,.14);border-radius:99px;padding:8px 14px;transition:background .2s}
+.ghost-dark:hover{background:#fff3ec}
+.x{width:30px;height:30px;border-radius:50%;border:0;background:#fff;color:var(--ink);font-size:18px;line-height:1}
+.pc-lede{margin:0;font-size:14px;line-height:1.8;color:var(--ink)}
+.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:10px;font-size:13px;line-height:1.8;color:var(--ink)}
+.steps li button{margin-left:6px}
+#cardInput,#promptBox,#memBox{width:100%;box-sizing:border-box;font:inherit;font-size:13px;line-height:1.6;color:var(--ink);background:#fff;border:1px solid rgba(62,53,73,.14);border-radius:14px;padding:10px 12px;resize:vertical;-webkit-user-select:text;user-select:text}
+#cardInput:focus-visible,#promptBox:focus-visible{outline:2px solid var(--peach);outline-offset:1px}
+.row-btns,.mem{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+
+/* end card */
+.card{pointer-events:auto;width:100%;max-width:440px;max-height:100%;overflow:auto;padding:26px 24px 22px;background:rgba(255,248,242,.94);
+  border-radius:28px;display:flex;flex-direction:column;gap:16px;animation:float .9s ease both;-webkit-user-select:text;user-select:text}
+.card-top{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.eyebrow{font-size:11px;letter-spacing:.26em;color:var(--ink-soft)}
+.badge{font-size:11px;letter-spacing:.14em;color:#b0583f;background:#ffe6dc;border-radius:99px;padding:4px 10px;white-space:nowrap}
+.score-line{display:flex;align-items:flex-end;gap:12px}
+.score-line svg{width:34px;height:34px;flex:none;margin-bottom:8px}
+.score-big{font-family:var(--f-display);font-weight:300;font-size:68px;line-height:.9;color:var(--peach);font-variant-numeric:tabular-nums}
+.score-unit{font-size:13px;color:var(--ink-soft);padding-bottom:6px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0}
+.stats div{display:flex;flex-direction:column;gap:4px;min-width:0;padding:10px 12px;border-radius:16px;background:#fff}
+.stats dt{display:flex;align-items:center;gap:6px;font-size:11px;letter-spacing:.08em;color:var(--ink-soft)}
+.stats dt i{width:7px;height:7px;border-radius:50%;flex:none}
+.stats dd{margin:0;font-family:var(--f-display);font-size:22px;font-variant-numeric:tabular-nums}
+.chat{display:flex;flex-direction:column;gap:10px;padding-top:4px;border-top:1px solid var(--hair)}
+.chat-head{display:flex;align-items:center;gap:10px;padding-top:12px}
+.ava{width:26px;height:26px;flex:none}
+.chat-head b{font-weight:500;font-size:13px}
+.chat-head span{font-size:11px;color:var(--ink-soft);letter-spacing:.08em}
+.msgs{display:flex;flex-direction:column;gap:10px;max-height:min(34vh,280px);overflow-y:auto}
+.msg{display:flex;gap:8px;align-items:flex-end;max-width:100%}
+.msg .t{font-size:14px;line-height:1.75;padding:9px 13px;border-radius:18px;min-width:0;overflow-wrap:anywhere;white-space:pre-wrap}
+.msg.ai .ava{width:22px;height:22px}
+.msg.ai .t{background:#fff;border-bottom-left-radius:6px}
+.msg.me{justify-content:flex-end}
+.msg.me .t{background:#ffe2d8;border-bottom-right-radius:6px}
+.msg.pending .t{color:var(--ink-soft);letter-spacing:.3em}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{font-size:12px;color:var(--ink);background:transparent;border:1px solid rgba(62,53,73,.16);border-radius:99px;padding:6px 12px;transition:background .2s}
+.chips button:hover{background:#fff}
+.composer{display:flex;gap:6px;align-items:center;background:#fff;border-radius:99px;padding:4px 4px 4px 16px}
+.composer input{flex:1;min-width:0;font:inherit;font-size:14px;color:var(--ink);background:transparent;border:0;padding:8px 0}
+.composer input:focus-visible{outline:none}
+.composer:focus-within{box-shadow:0 0 0 2px rgba(255,151,122,.45)}
+.composer button{width:36px;height:36px;flex:none;border-radius:50%;border:0;display:grid;place-items:center;color:#fff;background:var(--peach)}
+.composer button svg{width:16px;height:16px}
+.composer button:disabled{opacity:.45}
+.card button:focus-visible,.card input:focus-visible{outline-color:var(--peach)}
+.note{font-size:12px;color:var(--ink-soft);margin:0}
+.primary{display:inline-flex;justify-content:center;align-items:center;gap:10px;font-family:var(--f-display);font-weight:500;font-size:16px;letter-spacing:.24em;
+  color:#fff;border:0;border-radius:99px;padding:14px 22px;background:var(--peach);transition:transform .2s}
+.primary svg{width:16px;height:16px}
+.primary:hover{transform:translateY(-1px)}
+.primary:disabled{opacity:.6;transform:none}
+@media (max-width:440px){
+  .card{padding:22px 18px 18px}.num{font-size:32px}.corner.right .num{font-size:24px}.score-big{font-size:56px}
+  .hud{padding-left:16px;padding-right:16px;gap:8px}.phases,.track{width:min(150px,36vw)}.phases{font-size:9px;letter-spacing:.12em}
+}
+@media (prefers-reduced-motion:reduce){.intro,.card{animation:none}}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-fly" viewBox="0 0 24 24"><ellipse cx="9" cy="8" rx="5" ry="2.6" fill="#fff" opacity=".9" transform="rotate(-35 9 8)"/><ellipse cx="15" cy="8" rx="5" ry="2.6" fill="#fff" opacity=".9" transform="rotate(35 15 8)"/><ellipse cx="12" cy="11" rx="2.6" ry="4.6" fill="#5e4c80"/><circle cx="12" cy="17" r="3.6" fill="#efffa6"/></symbol>
+    <symbol id="i-ai" viewBox="0 0 26 26"><circle cx="13" cy="13" r="12" fill="#fff"/><circle cx="13" cy="13" r="12" fill="none" stroke="#e7def5"/><circle cx="9.6" cy="12.4" r="1.5" fill="#4a3f5c"/><circle cx="16.4" cy="12.4" r="1.5" fill="#4a3f5c"/></symbol>
+  </defs>
+</svg>
+
+<canvas id="c" aria-label="萤线游戏画面"></canvas>
+
+<div class="hud" id="hud" data-off>
+  <div class="corner">
+    <span class="lab"><svg><use href="#i-fly"/></svg>萤火</span>
+    <span class="num" id="score">0</span>
+  </div>
+  <div class="night">
+    <div class="phases" id="phases"><span class="on">静夜</span><span>呼吸</span><span>萤火潮</span></div>
+    <div class="track"><i><b id="seg0"></b></i><i><b id="seg1"></b></i><i><b id="seg2"></b></i><span class="moon" id="moon"></span></div>
+    <div class="chips-row">
+      <span class="pill combo" id="comboPill" hidden>连续 <b id="comboNum">0</b><span class="dots" id="comboDots"><i></i><i></i><i></i><i></i><i></i></span></span>
+      <span class="pill status" id="statusPill" hidden><span id="statusText"></span></span>
+      <span class="pill item" id="kingPill" hidden><svg viewBox="0 0 24 24" fill="#ffd56e"><path d="M4 18h16l-1.6-9-4.4 4-2-7-2 7-4.4-4z"/></svg><span id="kingText"></span></span>
+      <span class="pill item" id="slingPill" hidden>弹弓 ×<b id="slingNum">1</b></span>
+      <span class="pill free" id="freePill" hidden>金线 · 可以无限拉长<span class="bar"><i id="freeFill"></i></span></span>
+    </div>
+  </div>
+  <div class="corner right">
+    <span class="lab">离天亮</span>
+    <span class="num" id="time">1:30</span>
+    <span class="lab" id="phaseLabel" hidden>静夜</span>
+  </div>
+</div>
+<div class="tip" id="tip" data-off><span class="pill">双击或按空格，给 AI 发个信号</span></div>
+<button class="snd" id="sndBtn" type="button" aria-pressed="true" aria-label="声音">
+  <svg class="on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4h4l5 4V6L8 10z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/></svg>
+  <svg class="off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4h4l5 4V6L8 10z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>
+</button>
+
+<div class="overlay" id="menu">
+  <div class="intro">
+    <span class="kicker">两个人的一根线</span>
+    <h1>萤线</h1>
+    <p class="lede">你牵一头，你的 AI 牵另一头。</p>
+    <ul class="howto">
+      <li class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="7" cy="12" r="3"/><circle cx="17" cy="12" r="3"/><path d="M10 12h4"/></svg>用线扫过萤火</li>
+      <li class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="7" stroke-dasharray="3 3"/><circle cx="12" cy="12" r="2.4" fill="#ffc85a" stroke="none"/></svg>圈住金色萤火</li>
+      <li class="pill"><svg viewBox="0 0 24 24" fill="#ffd56e"><path d="M4 18h16l-1.6-9-4.4 4-2-7-2 7-4.4-4z"/></svg>攒萤火换道具</li>
+      <li class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="2"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="10" opacity=".5"/></svg>双击发信号</li>
+    </ul>
+    <button class="glass" id="startBtn" type="button">开始这一夜<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+    <div class="persona-row"><button class="ghost" id="personaBtn" type="button">带上你的 AI</button><span class="small" id="personaInfo"></span></div>
+    <p class="small" id="aiNote"></p>
+  </div>
+</div>
+
+<div class="overlay" id="personaPanel" hidden>
+  <div class="card">
+    <div class="card-top"><span class="eyebrow">带上你的 AI</span><button class="x" id="pClose" type="button" aria-label="关闭">×</button></div>
+    <p class="pc-lede">让你平时用的那个 AI 带着对你的记忆来陪你玩。它的名字、说话方式和性格都会进到游戏里，性格还会改变它的玩法。</p>
+    <ol class="steps">
+      <li><b>复制提示词</b>，发给你的 AI（ChatGPT、Claude、豆包都可以）。<button class="ghost-dark" id="copyPrompt" type="button">复制提示词</button></li>
+      <li><b>把它回给你的卡片</b>整段粘贴到下面，点装载。</li>
+    </ol>
+    <textarea id="promptBox" rows="5" readonly hidden></textarea>
+    <textarea id="cardInput" rows="6" placeholder="把 AI 回给你的卡片粘贴到这里"></textarea>
+    <p class="note" id="pNote"></p>
+    <div class="row-btns"><button class="primary" id="pLoad" type="button">装载</button><button class="ghost-dark" id="pClear" type="button" hidden>换回默认的小光球</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="over" hidden>
+  <div class="card">
+    <div class="card-top"><span class="eyebrow" id="endEyebrow">九十秒过去 · 天亮了</span><span class="badge" id="badge">默契搭档</span></div>
+    <div class="score-line"><svg><use href="#i-fly"/></svg><span class="score-big" id="finalScore">0</span><span class="score-unit">点萤火，一起收进来的</span></div>
+    <dl class="stats">
+      <div><dt><i style="background:#ffc85a"></i>金色萤火</dt><dd id="stGold">0</dd></div>
+      <div><dt><i style="background:#ff977a"></i>最长连续</dt><dd id="stCombo">0</dd></div>
+      <div><dt><i style="background:#9a86e6"></i>重新牵线</dt><dd id="stSnap">0</dd></div>
+    </dl>
+    <section class="chat" id="chat">
+      <div class="chat-head"><svg class="ava"><use href="#i-ai"/></svg><div><b>你的 AI</b><br><span>聊聊刚才这一夜</span></div></div>
+      <div class="msgs" id="msgs" aria-live="polite"></div>
+      <div class="chips" id="chips"></div>
+      <form class="composer" id="composer" autocomplete="off">
+        <input id="chatInput" type="text" maxlength="200" placeholder="说点什么">
+        <button type="submit" id="sendBtn" aria-label="发送"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button>
+      </form>
+    </section>
+    <p class="note" id="chatNote" hidden></p>
+    <div class="mem"><button class="ghost-dark" id="memBtn" type="button">带回记忆 · 复制这一夜给你的 AI</button><span class="note" id="memNote"></span></div>
+    <textarea id="memBox" rows="5" readonly hidden></textarea>
+    <button class="primary" id="againBtn" type="button">再来一夜<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4"/></svg></button>
+  </div>
+</div>
+
+<script>
+(()=>{
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+const $=id=>document.getElementById(id);
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+let W=0,H=0,S=1,DPR=1,grain=null;
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const rand=(a,b)=>a+Math.random()*(b-a);
+const pick=a=>a[Math.random()*a.length|0];
+const hex=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
+const mix=(a,b,t)=>{const A=hex(a),B=hex(b);return `rgb(${A.map((v,i)=>Math.round(v+(B[i]-v)*t)).join(',')})`};
+const mixA=(a,b,t,al)=>{const A=hex(a),B=hex(b);return `rgba(${A.map((v,i)=>Math.round(v+(B[i]-v)*t)).join(',')},${al})`};
+const rgba=(h,a)=>`rgba(${hex(h).join(',')},${a})`;
+function closest(px,py,ax,ay,bx,by){
+  const dx=bx-ax,dy=by-ay,l=dx*dx+dy*dy;let t=l?((px-ax)*dx+(py-ay)*dy)/l:0;t=clamp(t,0,1);
+  const x=ax+t*dx,y=ay+t*dy;return {x,y,d:Math.hypot(x-px,y-py)};
+}
+const segDist=(px,py,ax,ay,bx,by)=>closest(px,py,ax,ay,bx,by).d;
+function circle(x,y,r,fill){ctx.fillStyle=fill;ctx.beginPath();ctx.arc(x,y,Math.max(0,r),0,7);ctx.fill()}
+function roundRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+
+/* ---------- Claude ---------- */
+let sample=null,perms=null,aiOff=false,aiChecked=false;
+if(window.claude&&window.claude.use){
+  window.claude.use('sample').then(f=>{sample=f||null;aiChecked=true;noteAI()}).catch(()=>{aiChecked=true;noteAI()});
+  window.claude.use('permissions').then(p=>{perms=p}).catch(()=>{});
+}else{aiChecked=true}
+function noteAI(){$('aiNote').textContent=sample?'':'AI 搭档使用内置台词；点“带上你的 AI”，可以换成你自己 AI 的名字、口吻和记忆。'}
+setTimeout(()=>{if(!sample){aiChecked=true;noteAI()}},10500);
+const fatal=c=>['not_granted','sampling_disabled','not_declared','capability_disabled','capability_removed','session_expired'].includes(c);
+
+/* ---------- your own AI, brought in as a card ---------- */
+let PERSONA=null;try{PERSONA=JSON.parse(localStorage.getItem('yingxian-persona')||'null')}catch(e){}
+const aiName=()=>PERSONA&&PERSONA.name||'AI';
+const STYLE=()=>{const st=PERSONA&&PERSONA.style||{};return {bold:st.boldness??.5,energy:st.energy??.5,chatty:st.chatty??.6}};
+function personaText(){
+  if(!PERSONA)return '';
+  return `你的名字叫「${PERSONA.name}」，你平时叫玩家「${PERSONA.callMe}」。你的性格和玩法：${PERSONA.styleNote||'温暖'}。你记得关于玩家的这些事：${(PERSONA.memories||[]).join('；')||'（暂无）'}。请完全用你自己平时和玩家说话的口吻。\n`;
+}
+const CARD_PROMPT=`我们要一起玩一个叫《萤线》的小游戏：你和我各牵一根光绳的一头，一起扫过萤火虫、用绳子圈住金色萤火、躲开会把绳子碰断的冷雾。你会以一颗有眼睛的白色毛绒小光球的样子出现在游戏里陪我玩。
+请根据你对我的了解和我们之前的聊天记忆，写一张「游戏角色卡」。只回复一个 JSON，不要任何别的文字，格式如下：
+{
+  "name": "你在游戏里的名字（不超过6个字）",
+  "callMe": "你平时怎么称呼我",
+  "styleNote": "一句话说说你玩游戏的性格",
+  "style": {"boldness": 0到1之间的数字，越大越爱冒险, "energy": 0到1，越大越活泼激进, "chatty": 0到1，越大越话多},
+  "memories": ["3到6条你记得的关于我的事或我们之间的梗，每条不超过20个字"],
+  "lines": {"start": [], "catch": [], "combo": [], "danger": [], "lead": [], "tug": [], "snap": [], "frozen": [], "retie": [], "goldseen": [], "gold": [], "cheer": [], "king": [], "sling": []}
+}
+lines 里每一类写4句你在那个时刻会对我说的话，每句不超过12个字，用你平时和我说话的口吻，可以提到我们的梗。各类的含义：start 开局；catch 抓到萤火；combo 连续抓到很多；danger 冷雾靠近；lead 我停下不动、你拖着我走；tug 绳子绷紧、我们互相拽；snap 我被冻住、你去救我；frozen 你被冻住、喊我救你；retie 重新接上；goldseen 看到金色萤火；gold 圈住了金色萤火；cheer 平时闲聊；king 召唤出萤火虫王；sling 一起用弹弓弹飞。`;
+function parseCard(t){
+  const i=t.indexOf('{'),j=t.lastIndexOf('}');if(i<0||j<=i)throw new Error('nojson');
+  const v=JSON.parse(t.slice(i,j+1)),name=String(v.name||'').trim().slice(0,8);if(!name)throw new Error('noname');
+  const st=v.style||{},num=x=>{const n=Number(x);return Number.isFinite(n)?Math.max(0,Math.min(1,n)):.5};
+  const lines={};if(v.lines&&typeof v.lines==='object')for(const k in v.lines)if(Array.isArray(v.lines[k])){const a=v.lines[k].map(x=>String(x).trim().replace(/^["“「]|["”」]$/g,'').slice(0,16)).filter(Boolean).slice(0,8);if(a.length)lines[k]=a}
+  return {name,callMe:String(v.callMe||'你').trim().slice(0,8)||'你',styleNote:String(v.styleNote||'').trim().slice(0,40),
+    style:{boldness:num(st.boldness),energy:num(st.energy),chatty:num(st.chatty)},
+    memories:(Array.isArray(v.memories)?v.memories:[]).map(x=>String(x).trim().slice(0,30)).filter(Boolean).slice(0,6),lines};
+}
+function styleWords(){const s=STYLE();return `${s.bold>.62?'爱冒险':s.bold<.38?'求稳':'稳中带浪'} · ${s.energy>.62?'活泼':s.energy<.38?'温和':'刚刚好'} · ${s.chatty>.62?'话多':s.chatty<.38?'安静':'爱聊'}`}
+function renderPersona(){
+  $('personaBtn').textContent=PERSONA?'更换 AI 卡片':'带上你的 AI';
+  $('personaInfo').textContent=PERSONA?`已装载「${PERSONA.name}」· ${styleWords()}`:'';
+  $('pClear').hidden=!PERSONA;
+}
+
+/* ---------- sound ---------- */
+const AU={ctx:null,on:true,out:null};
+try{AU.on=localStorage.getItem('yingxian-sound')!=='off'}catch(e){}
+function setSndBtn(){$('sndBtn').setAttribute('aria-pressed',AU.on);$('sndBtn').setAttribute('aria-label',AU.on?'关闭声音':'打开声音')}
+setSndBtn();
+$('sndBtn').addEventListener('click',()=>{AU.on=!AU.on;try{localStorage.setItem('yingxian-sound',AU.on?'on':'off')}catch(e){}setSndBtn();if(AU.on){audioInit();if(G.mode==='play')musicStart()}else musicStop()});
+function audioInit(){
+  try{
+    if(AU.ctx){AU.ctx.resume();return}
+    const C=window.AudioContext||window.webkitAudioContext;if(!C)return;
+    const a=new C(),out=a.createGain();out.gain.value=.55;
+    const dl=a.createDelay(),fb=a.createGain(),lp=a.createBiquadFilter();
+    dl.delayTime.value=.26;fb.gain.value=.3;lp.type='lowpass';lp.frequency.value=2200;
+    out.connect(a.destination);out.connect(dl);dl.connect(lp);lp.connect(fb);fb.connect(dl);lp.connect(a.destination);
+    AU.ctx=a;AU.out=out;
+  }catch(e){}
+}
+function tone(f,dur,type,gain,when,slide){
+  if(!AU.ctx||!AU.on||G.mode!=='play')return;
+  try{
+    const a=AU.ctx,t0=a.currentTime+(when||0),o=a.createOscillator(),g=a.createGain();
+    o.type=type||'sine';o.frequency.setValueAtTime(f,t0);if(slide)o.frequency.exponentialRampToValueAtTime(slide,t0+dur);
+    g.gain.setValueAtTime(0,t0);g.gain.linearRampToValueAtTime(gain,t0+.008);g.gain.exponentialRampToValueAtTime(.0001,t0+dur);
+    o.connect(g);g.connect(AU.out);o.start(t0);o.stop(t0+dur+.05);
+  }catch(e){}
+}
+const MUS={on:false,timer:null,next:0,step:0,gain:null};
+const CHORDS=[[0,4,7,11],[-3,0,4,7],[-7,-3,0,4],[-5,-1,2,7]]; // Cmaj7 Am7 Fmaj7 G6: a slow, warm loop
+function mNote(f,t,dur,type,gain,att){const a=AU.ctx,o=a.createOscillator(),g=a.createGain();o.type=type;o.frequency.value=f;
+  g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(gain,t+att);g.gain.exponentialRampToValueAtTime(.0001,t+dur);o.connect(g);g.connect(MUS.gain);o.start(t);o.stop(t+dur+.1)}
+let NOISE=null;
+function mHat(t,g){const a=AU.ctx;if(!NOISE){NOISE=a.createBuffer(1,Math.floor(a.sampleRate*.2),a.sampleRate);const d=NOISE.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1}
+  const s=a.createBufferSource(),f=a.createBiquadFilter(),v=a.createGain();s.buffer=NOISE;f.type='highpass';f.frequency.value=7000;
+  v.gain.setValueAtTime(g,t);v.gain.exponentialRampToValueAtTime(.0001,t+.06);s.connect(f);f.connect(v);v.connect(MUS.gain);s.start(t);s.stop(t+.08)}
+function mKick(t,g){const a=AU.ctx,o=a.createOscillator(),v=a.createGain();o.frequency.setValueAtTime(130,t);o.frequency.exponentialRampToValueAtTime(42,t+.16);
+  v.gain.setValueAtTime(g,t);v.gain.exponentialRampToValueAtTime(.0001,t+.3);o.connect(v);v.connect(MUS.gain);o.start(t);o.stop(t+.32)}
+function musicTick(){
+  const a=AU.ctx;if(!a||!MUS.on)return;
+  const ph=G.mode==='play'?G.phase:0,step=60/[100,114,128][ph]/2,base=261.63;
+  while(MUS.next<a.currentTime+.3){
+    const s=MUS.step,ch=CHORDS[Math.floor(s/16)%4],t=MUS.next;
+    if(s%16===0)for(const n of ch){mNote(base/2*Math.pow(2,n/12),t,step*17,'triangle',.022,.6);mNote(base*Math.pow(2,n/12),t,step*16,'sine',.013,1)}
+    if(s%4===0)mNote(base/4*Math.pow(2,ch[0]/12),t,step*3.2,'triangle',.075,.01);            // bass on the beat
+    if(s%4===2&&ph>0)mNote(base/4*Math.pow(2,ch[2]/12),t,step*1.6,'triangle',.05,.01);
+    if(s%4===0)mKick(t,[.11,.15,.18][ph]);if(ph===2&&s%8===6)mKick(t,.1);
+    if(ph===1&&s%8===1)mNote(65.4,t,.4,'sine',.05,.01);                                      // the breathing heartbeat stays
+    if(s%2===1)mHat(t,[.03,.042,.05][ph]);if(ph===2&&s%2===0)mHat(t,.02);
+    const pat=[[1,0,1,0,1,0,1,1],[1,1,1,0,1,1,1,1],[1,1,1,1,1,1,1,1]][ph];
+    if(pat[s%8]){const n=ch[(s*3+Math.floor(s/8))%4]+(s%8>=4?12:0)+(ph===2&&s%4===3?12:0);
+      mNote(base*Math.pow(2,n/12),t,.5,'sine',.042,.005);if(ph>0)mNote(base*2*Math.pow(2,n/12),t,.2,'triangle',.009,.005)}
+    MUS.next+=step;MUS.step++;
+  }
+}
+function musicStart(){
+  if(!AU.ctx||!AU.on||MUS.on)return;MUS.on=true;const a=AU.ctx;
+  MUS.gain=a.createGain();MUS.gain.gain.setValueAtTime(0,a.currentTime);MUS.gain.gain.linearRampToValueAtTime(1.35,a.currentTime+2);MUS.gain.connect(AU.out);
+  MUS.next=a.currentTime+.15;MUS.step=0;MUS.timer=setInterval(musicTick,90);
+}
+function musicStop(){
+  if(!MUS.on)return;MUS.on=false;clearInterval(MUS.timer);const a=AU.ctx,g=MUS.gain;
+  try{g.gain.cancelScheduledValues(a.currentTime);g.gain.setValueAtTime(g.gain.value,a.currentTime);g.gain.linearRampToValueAtTime(0,a.currentTime+1.5);setTimeout(()=>g.disconnect(),1800)}catch(e){}
+}
+const PENTA=[0,2,4,7,9,12,14,16,19,21,24,26,28];
+const note=st=>523.25*Math.pow(2,st/12);
+const SND={
+  catch(c){const st=PENTA[Math.min(c-1,PENTA.length-1)];tone(note(st),.8,'sine',.13);tone(note(st)*2,.3,'triangle',.025);if(c>=5)tone(note(st)*3,.2,'sine',.025,.05)},
+  milestone(){[0,4,7,12,16,19].forEach((s,i)=>tone(note(s),.7,'sine',.09,i*.06));tone(note(24),1.2,'triangle',.03,.36)},
+  boing(){tone(170,.22,'sine',.05,0,260)},
+  gold(){[0,4,7,12,16].forEach((s,i)=>tone(note(s),.9,'sine',.11,i*.07))},
+  snap(){tone(300,.55,'sine',.13,0,110)},
+  knot(){tone(784,.14,'sine',.08);tone(1046,.35,'sine',.08,.09);tone(1568,.3,'triangle',.02,.09)},
+  ping(){tone(660,.25,'sine',.05);tone(990,.3,'sine',.035,.06)},
+  happy(){tone(880,.1,'sine',.06);tone(1175,.14,'sine',.06,.08)},
+  giggle(){[0,.07,.14].forEach((w,i)=>tone(1046+i*120,.08,'sine',.05,w))},
+  worry(){tone(720,.2,'sine',.045,0,520)},
+  dizzy(){[0,.09,.18,.27].forEach((w,i)=>tone(i%2?600:760,.1,'sine',.045,w))},
+  sleepy(){tone(330,.6,'sine',.04,0,260)},
+  wake(){tone(500,.08,'sine',.06,0,1100)},
+  tug(){tone(200,.25,'triangle',.04,0,240)},
+  zap(){tone(1500,.16,'sine',.05,0,620)},
+  sling(){tone(220,.55,'triangle',.1,0,880);tone(660,.6,'sine',.06,.08,1320)},
+  king(){[0,7,12,16,19,24].forEach((s,i)=>tone(note(s),1,'sine',.08,i*.08))}
+};
+
+/* ---------- dream field ---------- */
+const PAL=['#4f74d6','#3fb0d6','#58d0dc','#a98ff0','#ff8f9a','#ffb79a','#e9a1d8','#7d8ff0'];
+const BLOBS=Array.from({length:6},(_,i)=>({bx:[.15,.85,.5,.1,.9,.45][i],by:[.15,.1,.45,.8,.75,.2][i],
+  f1:rand(.05,.11),f2:rand(.04,.09),f3:rand(.08,.15),ph:rand(0,6.28),off:i*1.3,dep:1+i%3,r:[.42,.4,.36,.4,.38,.3][i]}));
+const fieldC=document.createElement('canvas'),fx2=fieldC.getContext('2d');
+function palAt(v){const n=PAL.length,i=((Math.floor(v)%n)+n)%n,f=v-Math.floor(v);return [PAL[i],PAL[(i+1)%n],f]}
+function drawField(){
+  const bw=160,bh=Math.max(90,Math.round(160*H/W));
+  if(fieldC.width!==bw||fieldC.height!==bh){fieldC.width=bw;fieldC.height=bh}
+  const t=G.t,m=Math.max(bw,bh),p=G.dawn,cx=(G.h.x-W/2)/W,cy=(G.h.y-H/2)/H;
+  const g=fx2.createLinearGradient(0,0,bw,bh);
+  g.addColorStop(0,mix('#5874d6','#7a8ee6',p));g.addColorStop(.5,mix('#62a6dc','#8ec0e0',p));g.addColorStop(1,mix('#9284e6','#c09ae6',p));
+  fx2.fillStyle=g;fx2.fillRect(0,0,bw,bh);
+  for(const b of BLOBS){
+    const x=bw*(b.bx+.2*Math.sin(t*b.f1+b.ph)-cx*.05*b.dep)+G.windDrift*b.dep*.6,y=bh*(b.by+.16*Math.cos(t*b.f2+b.ph)-cy*.05*b.dep);
+    const r=m*(b.r+.08*Math.sin(t*b.f3+b.ph));
+    const [c1,c2,f]=palAt(b.off+t*.018);
+    const rg=fx2.createRadialGradient(x,y,0,x,y,r);
+    rg.addColorStop(0,mixA(c1,c2,f,.62));rg.addColorStop(.6,mixA(c1,c2,f,.26));rg.addColorStop(1,mixA(c1,c2,f,0));
+    fx2.fillStyle=rg;fx2.fillRect(0,0,bw,bh);
+  }
+  // warm light rising from below; grows toward dawn
+  const wx=bw*(.5+.12*Math.sin(t*.07)-cx*.04),wy=bh*1.06,wr=m*(.5+p*.34),wa=.5+p*.45;
+  const wg=fx2.createRadialGradient(wx,wy,0,wx,wy,wr);
+  wg.addColorStop(0,`rgba(253,236,196,${Math.min(1,wa*1.1)})`);wg.addColorStop(.36,`rgba(255,198,160,${wa})`);
+  wg.addColorStop(.6,`rgba(255,146,150,${wa*.75})`);wg.addColorStop(.82,`rgba(222,144,214,${wa*.35})`);wg.addColorStop(1,'rgba(170,140,240,0)');
+  fx2.fillStyle=wg;fx2.fillRect(0,0,bw,bh);
+}
+/* ---------- furry dream masses: big flat gradient shapes with fur edges that breathe and drift ---------- */
+// far to near; ax/ay = anchor as a fraction of the screen, r = radius as a fraction of the long side
+const MASS_DEF=[
+  {ax:.97,ay:-.14,r:.42,inner:'#a6e4ea',alt:'#b4c8f6',edge:'#5aa8de',a:.78,dep:.25},
+  {ax:.0,ay:-.02,r:.33,inner:'#a3aef2',alt:'#c2a8f0',edge:'#6270d8',a:.72,dep:.35},
+  {ax:-.16,ay:.66,r:.36,inner:'#ffcfc8',alt:'#ffc4dc',edge:'#ef8aa2',a:.8,dep:.55},
+  {ax:1.1,ay:.9,r:.42,inner:'#e2d0f8',alt:'#f4c6e4',edge:'#9c88e6',a:.8,dep:.75},
+  {ax:.46,ay:1.34,r:.56,inner:'#fdeecf',alt:'#ffe0c8',edge:'#ff9c88',a:.9,dep:1,warm:true}
+];
+let masses=[];
+function buildFluff(){
+  const L=Math.max(W,H);
+  masses=MASS_DEF.map((d,i)=>{
+    const R=d.r*L,n=Math.min(1100,Math.round(6.283*R/4.2));
+    const hairs=Array.from({length:n},()=>{const th=Math.random()*6.283;return {th,c:Math.cos(th),s:Math.sin(th),l:rand(5,20)*S*(Math.random()<.12?1.6:1),tilt:rand(-.35,.35),ph:rand(0,6)}});
+    return Object.assign({},d,{i,R0:R,p1:rand(0,6),p2:rand(0,6),p3:rand(0,6),pb:rand(0,6),f1:rand(.05,.09),f2:rand(.04,.08),hairs,cx:0,cy:0,R:R,s:1,sv:0,sT:1,nextT:rand(.5,3),bumps:[]});
+  });
+}
+function massR(m,th){
+  const t=G.t;let r=m.R*(1+.06*Math.sin(2*th+m.p1+t*.13)+.04*Math.sin(3*th+m.p2-t*.17)+.025*Math.sin(5*th+m.p3+t*.23));
+  if(m.press){let d=th-m.press.th;d=((d+Math.PI)%6.2832+6.2832)%6.2832-Math.PI;r-=m.press.a*m.R0*.09*Math.exp(-d*d/.04)}
+  for(const b of m.bumps){let d=th-b.th;d=((d+Math.PI)%6.2832+6.2832)%6.2832-Math.PI;r+=b.a*m.R0*Math.exp(-d*d/.06)}
+  return r;
+}
+// each mass springs toward a random size every few seconds, overshooting like jelly; dents wobble back
+function updateMasses(dt){
+  const range=G.mode==='play'&&G.phase===1?.2:.12;
+  for(const m of masses){
+    m.nextT-=dt;if(m.nextT<=0){m.nextT=rand(1.6,4.2);m.sT=1+rand(-range,range)}
+    m.sv+=(7*(m.sT-m.s)-1.5*m.sv)*dt;m.s+=m.sv*dt;
+    for(const b of m.bumps){b.v+=(-40*b.a-3*b.v)*dt;b.a+=b.v*dt}
+    m.bumps=m.bumps.filter(b=>Math.abs(b.a)>.0006||Math.abs(b.v)>.004);
+  }
+}
+function addBump(m,th,amp){if(m.bumps.length>6)m.bumps.shift();m.bumps.push({th,a:0,v:amp*6.5})}
+function nearestMass(x,y){let best=null,bd=1e9;for(const m of masses){const dx=x-m.cx,dy=y-m.cy,th=Math.atan2(dy,dx),d=Math.abs(Math.hypot(dx,dy)-massR(m,th));if(d<bd){bd=d;best={m,th}}}return best}
+function jiggleAll(v){for(const m of masses)m.sv+=v*rand(.7,1.3)}
+function insideMass(x,y,pad){for(const m of masses){const dx=x-m.cx,dy=y-m.cy;if(Math.hypot(dx,dy)<massR(m,Math.atan2(dy,dx))+pad)return m}return null}
+function placeMasses(){
+  const t=G.t,cx=(G.h.x-W/2),cy=(G.h.y-H/2),wx=G.wind.x/(95*S||1);
+  for(const m of masses){
+    m.cx=W*m.ax+Math.sin(t*m.f1+m.p1)*W*.035-cx*.035*m.dep+wx*18*S*m.dep;
+    m.cy=H*m.ay+Math.cos(t*m.f2+m.p2)*H*.03-cy*.03*m.dep;
+    m.R=m.R0*(m.warm?1+(m.s-1)*.6:m.s)*(1+.015*Math.sin(t*.45+m.pb))*(m.warm?(.84+.2*G.dawn):1);
+  }
+}
+const K=110;
+function massPath(m,extra){
+  ctx.beginPath();
+  for(let i=0;i<=K;i++){const th=i/K*6.283,r=massR(m,th)+extra;const x=m.cx+Math.cos(th)*r,y=m.cy+Math.sin(th)*r;i?ctx.lineTo(x,y):ctx.moveTo(x,y)}
+  ctx.closePath();
+}
+function drawFluff(){
+  placeMasses();
+  const t=G.t,wx=G.wind.x/(95*S||1),wy=G.wind.y/(95*S||1),reach=95*S;
+  for(let k=0;k<masses.length;k++){
+    const m=masses[k],drift=(Math.sin(t*.06+k*1.7)+1)*.5;
+    const inner=mix(m.inner,m.alt,drift),edge=m.edge;
+    const edgeRGB='rgb('+hex(m.edge).join(',')+')';
+    // stepped flat halo, like light caught in fur
+    ctx.fillStyle=rgba(m.edge,.1);massPath(m,30*S);ctx.fill();
+    ctx.fillStyle=rgba(m.edge,.17);massPath(m,15*S);ctx.fill();
+    const g=ctx.createRadialGradient(m.cx,m.cy-m.R*.15,m.R*.05,m.cx,m.cy,m.R*1.04);
+    g.addColorStop(0,inner);g.addColorStop(.55,inner);g.addColorStop(1,edge);
+    ctx.globalAlpha=m.a;ctx.fillStyle=g;massPath(m,0);ctx.fill();ctx.globalAlpha=1;
+    // fur: fine hairs along the rim; they sway, lean with the wind, and part around you and the AI
+    ctx.strokeStyle=mixA(m.edge,'#ffffff',.5,.6);ctx.lineWidth=.7;ctx.beginPath();
+    for(const hr of m.hairs){
+      const r=massR(m,hr.th),bx=m.cx+hr.c*(r-hr.l*.45),by=m.cy+hr.s*(r-hr.l*.45);
+      if(bx<-30||bx>W+30||by<-30||by>H+30)continue;
+      const a=hr.th+hr.tilt+Math.sin(t*1.4+hr.ph)*.13;
+      let tx=bx+Math.cos(a)*hr.l*1.45+wx*hr.l*.5,ty=by+Math.sin(a)*hr.l*1.45+wy*hr.l*.5;
+      for(const o of [G.h,G.ai]){const dx=tx-o.x,dy=ty-o.y,d=Math.hypot(dx,dy);if(d<reach&&d>0){const p=(reach-d)/reach*.55;tx+=dx/d*hr.l*p*2;ty+=dy/d*hr.l*p*2}}
+      ctx.moveTo(bx,by);ctx.lineTo(tx,ty);
+    }
+    ctx.stroke();
+  }
+}
+function buildGrain(){
+  const g=document.createElement('canvas');g.width=g.height=180;const x=g.getContext('2d'),d=x.createImageData(180,180);
+  for(let i=0;i<d.data.length;i+=4){const v=128+(Math.random()-.5)*70;d.data[i]=d.data[i+1]=d.data[i+2]=v;d.data[i+3]=255}
+  x.putImageData(d,0,0);grain=ctx.createPattern(g,'repeat');
+}
+function resize(){
+  DPR=Math.min(2,window.devicePixelRatio||1);W=innerWidth;H=innerHeight;
+  cv.width=W*DPR;cv.height=H*DPR;cv.style.width=W+'px';cv.style.height=H+'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);S=clamp(Math.min(W,H)/700,.6,1.3);
+  if(grain===null)buildGrain();
+  buildFluff();
+}
+
+/* ---------- state ---------- */
+const PHASES=[{name:'静夜',sub:'冷雾稀少，先熟悉这根绳子'},{name:'呼吸',sub:'夜里变冷，绳子缩短了；色团大口呼吸'},{name:'萤火潮',sub:'萤火成群而来，每只双倍；冷雾最快'}];
+const LOCAL={
+  king:['萤火虫王来啦！','有它护着我们～','冷雾都退后！'],
+  sling:['弹——飞——！','抓紧我！','一口气全收了！'],
+  slingReady:['弹弓好了！钻进色团','我们一起挤那团！','弹弓到手～'],
+  start:['我在这头，你牵好那头。','今晚一起收多一点光。','出发啦～'],
+  catch:['好亮！','接住啦','又一只～','漂亮！','这只好暖','收到！','真准'],
+  combo:['我们好合拍！','停不下来了','继续继续！','节奏对了','太默契了吧'],
+  danger:['冷雾来了！','小心，收线！','躲一下～','那边有雾！'],
+  lead:['跟我来～','我带你去那边','走，去抓那只','你歇会儿，我带路','这边这边！'],
+  tug:['你拽我啦～','线绷紧了！','慢点慢点','嘿，往这边'],
+  snap:['线断了，我来找你！','别动，我过来救你。','等我！'],
+  frozen:['救我～','我动不了了！','快来接我～','冷冷冷……'],
+  carryYou:['抓紧，我拖你走～','我带你飞！','歇会儿，交给我'],
+  carryAI:['你拖我走吧～','嘿嘿，我偷个懒','冻僵了，带我一程'],
+  retie:['接上啦！','又牵上了。','好了，继续～'],
+  goldseen:['金色的！我们圈住它','靠近它，我绕过去','快，围住它！'],
+  loop:['再绕一点！','快合上了！','圈住它！','守住那边～'],
+  gold:['金线！能拉多远都行。','圈到啦！'],
+  goldmiss:['它溜走了。','下次一定圈住'],
+  cheer:['今晚好美','你走得真稳','我喜欢和你一起','那边好多萤火','我们越来越默契了','你看那团在呼吸','嘿嘿','好想把光都收集起来'],
+  bounce:['冷雾被弹走啦','嘣～','好软的墙'],
+  phase:['变天了。','色团在呼吸呢','萤火潮来了！'],
+  last:['快天亮了！','最后几只！'],
+  dizzy:['晕……别晃啦','转圈圈了……'],
+  wake:['嗯？在呢！'],
+  calm:['今晚好安静。']
+};
+// lines Claude writes for this night at the start; used in place of the defaults when they arrive
+const PACK={};
+const PACK_CATS={catch:'抓到一只萤火时',combo:'连续抓到很多只时',danger:'冷雾快碰到线、提醒玩家时',lead:'玩家停下不动、你拖着他去找萤火时',
+  tug:'线绷紧、你们互相拽时',snap:'线被冷雾碰断、你跑去找玩家时',retie:'重新把线接上时',goldseen:'金色萤火出现、要两人用绳子把它圈起来时',
+  loop:'正在用绳子圈金色萤火时',gold:'圈住金色萤火时',cheer:'平常闲聊，鼓励或感慨夜色',bounce:'冷雾撞在毛绒色团上被弹开时'};
+async function loadPack(){
+  if(!sample||aiOff||(PERSONA&&Object.keys(PERSONA.lines||{}).length>6))return;
+  const prompt=`${personaText()}你是玩家的 AI 搭档，一颗有眼睛的白色毛绒小光球。你们在玩《萤线》：你们各牵一根绳子的一头，用绳子扫过萤火虫来收集，用绳子圈住金色萤火，冷雾会把绳子碰断，四周是会呼吸的毛绒色团。
+为下面每种情况各写5句不同的口头台词。每句不超过10个汉字，温暖、俏皮、口语化，像好朋友边玩边说的话，不用表情符号，不加引号。
+${Object.entries(PACK_CATS).map(([k,v])=>k+'：'+v).join('\n')}
+只回复一个JSON对象，键是上面的英文名，值是5个字符串的数组。`;
+  try{const v=await sample.json(prompt,{modelTier:'quick',cache:false});
+    for(const k in PACK_CATS){const a=v&&v[k];if(Array.isArray(a)){const ok=a.map(x=>String(x).trim().replace(/^["“「]|["”」]$/g,'').slice(0,14)).filter(Boolean);if(ok.length>=2)PACK[k]=ok}}
+  }catch(e){if(fatal(e&&e.code))aiOff=true}
+}
+const G={mode:'menu',t:0,time:90,score:0,combo:0,comboT:0,maxCombo:0,snaps:0,reties:0,pings:0,gold:0,goldMiss:0,
+  flies:[],mists:[],fx:[],ripples:[],
+  h:{x:0,y:0,vx:0,vy:0},ai:{x:0,y:0,vx:0,vy:0},ptr:{x:0,y:0,set:false},
+  broken:false,cut:-1,brokeT:0,boingCd:0,catches:0,king:null,slings:0,slingsUsed:0,nextSling:12,sling:null,slingCharge:0,slingEase:0,pressM:null,spawnF:0,spawnS:0,plan:null,planT:0,shake:0,ping:null,dawn:.12,warm:0,
+  phase:0,banner:null,wind:{x:0,y:0},windAmt:0,windDrift:0,free:0,tension:0,tugT:0,tugs:0,goldT:0,
+  act:null,happyT:0,dizzyT:0,bounceT:0,idleT:0,sleepy:false,blinkT:3,blink:0,exclT:0,gaze:{x:0,y:0},worry:false,worryCd:0,bumpCd:0,
+  rev:{sign:0,times:[]},trailH:[],trailA:[],trailT:0,
+  bubble:null,localCd:0,lastSayT:0,lastLine:'',lead:0,inflight:false,calls:0,lastCall:-99,thoughts:[],log:[],flags:{},keys:{},menuT:0,hint:null};
+const hinted={};
+const makeFur=n=>Array.from({length:n},()=>[Math.random()*6.283,rand(.78,1),rand(.12,.5)*(Math.random()<.1?1.35:1)]);
+const fur={h:makeFur(150),a:makeFur(150)};
+const orbR=()=>Math.max(10,13*S);
+const ROPE=()=>Math.min(300*S,Math.hypot(W,H)*.45)*(G.mode==='play'&&G.phase===1?.78:1);
+const MAXL=()=>G.free>0?Math.hypot(W,H)*1.2:ROPE();
+const MINL=()=>34*S;
+const FREE_DUR=8,KING_NEED=24,SLING_EVERY=12,KING_R=()=>120*S;
+function ropeAt(u){const f=clamp(u,0,1)*N,i=Math.min(N-1,Math.floor(f)),t=f-i;return {x:rope[i].x+(rope[i+1].x-rope[i].x)*t,y:rope[i].y+(rope[i+1].y-rope[i].y)*t}}
+const elapsed=()=>Math.round(90-G.time);
+function log(e,v){if(G.mode==='play')G.log.push({t:elapsed(),e,v})}
+function showBubble(text,kind){G.bubble={text,t:0,dur:kind==='claude'?4:2.3,kind};G.lastSayT=G.t}
+function localSay(cat,force){
+  if(!force&&G.localCd>0)return;
+  if(G.bubble&&G.bubble.kind==='claude'&&G.bubble.t<G.bubble.dur-.6)return;
+  const pl=PERSONA&&PERSONA.lines&&PERSONA.lines[cat];
+  const pool=pl&&Math.random()<.85?pl:PACK[cat]&&Math.random()<.75?PACK[cat]:LOCAL[cat];if(!pool)return;
+  let line=pick(pool);if(line===G.lastLine&&pool.length>1)line=pick(pool);G.lastLine=line;
+  showBubble(line,pool===PACK[cat]?'pack':'local');G.localCd=force?1.1:2;
+}
+function showHint(key,text,x,y,dur){if(hinted[key])return;hinted[key]=1;G.hint={text,x,y,t:0,dur:dur||3.2}}
+
+/* ---------- Claude thoughts: few, at moments that matter ---------- */
+const EVENT_TEXT={
+  start:()=>'这一夜刚刚开始',
+  snap:()=>'线刚刚被冷雾碰断了，你正赶过去找玩家，两个人靠近就能把线重新接上',
+  phase:()=>`夜晚进入了「${PHASES[G.phase].name}」，${PHASES[G.phase].sub}`,
+  last:()=>'离天亮只剩最后15秒',
+  calm:()=>'刚才一阵子很平静，你们在慢慢走',
+  gold:()=>'你们刚用绳子绕一圈圈住了一只金色萤火，线变成了能无限拉长的金线',
+  dizzy:()=>'玩家刚刚把你来回晃，你被晃晕了'
+};
+const URGENT=new Set(['start','gold']);
+function think(ev,fallback){
+  const urgent=URGENT.has(ev)||(ev==='snap'&&G.snaps===1);
+  if(!sample||aiOff||G.inflight||G.calls>=12||(!urgent&&G.t-G.lastCall<7)){if(fallback!==false)localSay(LOCAL[ev]?ev:'calm',urgent);return}
+  G.inflight=true;G.calls++;G.lastCall=G.t;
+  const recent=G.thoughts.slice(-4).map(s=>`「${s}」`).join('')||'（还没有）';
+  const prompt=`${personaText()}你是玩家的 AI 搭档，是一颗有眼睛的白色小光球。你们在玩《萤线》：你们各牵一根有长度的光线的一头，让线穿过萤火虫把它们收集起来，冷雾碰到线，线就会断。一夜90秒，分静夜、呼吸、萤火潮三段。
+现在：第${elapsed()}秒，处在「${PHASES[G.phase].name}」，已收集${G.score}点，断线${G.snaps}次，当前连续${G.combo}只。
+刚刚发生：${EVENT_TEXT[ev]()}。
+你之前冒出过的念头：${recent}
+冒出一个此刻的念头，像从你头顶飘出的气泡。不超过12个汉字，温暖、具体、有点梦幻，可以对玩家说，也可以自言自语，不要重复之前的念头，不用表情符号。只输出这句话本身。`;
+  sample(prompt,{modelTier:'quick',cache:false}).then(r=>{
+    const s=String(r.text||'').trim().split('\n')[0].replace(/^["“「『]|["”」』]$/g,'').slice(0,20);
+    if(!s)return;G.thoughts.push(s);log('thought',s);if(G.mode==='play')showBubble(s,'claude');
+  }).catch(e=>{if(fatal(e&&e.code))aiOff=true;if(LOCAL[ev])localSay(ev,true)})
+  .finally(()=>{G.inflight=false});
+}
+
+/* ---------- the rope: a verlet chain that sags, sways and twangs ---------- */
+const N=16;let rope=[];
+function ropeInit(){rope=[];for(let i=0;i<=N;i++){const t=i/N,x=G.h.x+(G.ai.x-G.h.x)*t,y=G.h.y+(G.ai.y-G.h.y)*t;rope.push({x,y,ox:x,oy:y})}}
+function ropeSim(dt){
+  if(rope.length!==N+1)ropeInit();
+  const h=G.h,ai=G.ai,d=Math.hypot(ai.x-h.x,ai.y-h.y);
+  const seg=(G.free>0||G.sling?Math.max(ROPE(),d*1.01):ROPE())/N;
+  const grav=(G.broken?380:90)*S,ax=G.wind.x*2.4,ay=G.wind.y*2.4+grav,dt2=dt*dt;
+  for(let i=1;i<N;i++){const p=rope[i],vx=(p.x-p.ox)*.975,vy=(p.y-p.oy)*.975;p.ox=p.x;p.oy=p.y;p.x+=vx+ax*dt2;p.y+=vy+ay*dt2}
+  rope[0].x=rope[0].ox=h.x;rope[0].y=rope[0].oy=h.y;rope[N].x=rope[N].ox=ai.x;rope[N].y=rope[N].oy=ai.y;
+  const cut=G.broken?G.cut:-1;
+  for(let k=0;k<10;k++)for(let i=0;i<N;i++){
+    if(i===cut)continue;
+    const a=rope[i],b=rope[i+1],dx=b.x-a.x,dy=b.y-a.y,dd=Math.hypot(dx,dy)||1e-6;
+    if(dd<=seg)continue;const diff=(dd-seg)/dd;
+    const wa=i===0?0:(i+1===N?1:.5),wb=i+1===N?0:(i===0?1:.5);
+    a.x+=dx*diff*wa;a.y+=dy*diff*wa;b.x-=dx*diff*wb;b.y-=dy*diff*wb;
+  }
+}
+function ropeDist(x,y){
+  let best={d:1e9,i:0,x:0,y:0};
+  for(let i=0;i<N;i++){const c=closest(x,y,rope[i].x,rope[i].y,rope[i+1].x,rope[i+1].y);if(c.d<best.d)best={d:c.d,i,x:c.x,y:c.y}}
+  return best;
+}
+function pluck(i,amp){
+  const dx=G.ai.x-G.h.x,dy=G.ai.y-G.h.y,L=Math.hypot(dx,dy)||1,nx=-dy/L,ny=dx/L,s=Math.random()<.5?-1:1;
+  for(let j=1;j<N;j++){const k=Math.exp(-((j-i)*(j-i))/7);rope[j].ox-=nx*amp*k*S*s;rope[j].oy-=ny*amp*k*S*s}
+}
+// tug of war on the two ends: you're a little stronger than the AI
+function ropeStep(dt){
+  const h=G.h,ai=G.ai,dx=ai.x-h.x,dy=ai.y-h.y,d=Math.hypot(dx,dy)||1,L=MAXL();
+  G.tension=Math.max(0,G.tension-dt*3);
+  if(G.broken||d<=L)return;
+  let e=d-L;if(e>24*S)e=Math.max(12*S,e*Math.min(1,dt*7)); // a freed golden line reels back in smoothly
+  const ux=dx/d,uy=dy/d;
+  const wh=G.carry?(G.carry.who==='you'?.85:.15):.4;
+  h.x+=ux*e*wh;h.y+=uy*e*wh;ai.x-=ux*e*(1-wh);ai.y-=uy*e*(1-wh);
+  const v=ai.vx*ux+ai.vy*uy;if(v>0){ai.vx-=ux*v*.6;ai.vy-=uy*v*.6}
+  G.tension=Math.min(1,G.tension+e/(12*S));
+  if(G.mode==='play'&&G.tension>.6){
+    G.tugT+=dt;
+    if(G.tugT>.6){G.tugT=-3;G.tugs++;SND.tug();if(G.tugs===1){log('tug');localSay('tug',true);
+      showHint('tug','线绷紧了，你们在互相拽',(h.x+ai.x)/2,(h.y+ai.y)/2+40*S)}}
+  }else G.tugT=Math.max(0,G.tugT-dt);
+}
+
+/* ---------- spawning ---------- */
+const FY0=()=>H*.14,FY1=()=>H*.84;
+function spawnFly(opt){
+  const f={x:rand(W*.08,W*.92),y:rand(FY0(),FY1()),vx:0,vy:0,wx:0,wy:0,ph:rand(0,6.28),age:0,life:rand(9,13),r:rand(3,4.5),out:0,kind:'n',hold:0,
+    fp:rand(0,6.28),rate:rand(2.2,3.4),fl:1,trail:[],trT:0};
+  G.flies.push(Object.assign(f,opt||{}));return f;
+}
+function spawnGold(){
+  const f=spawnFly({kind:'gold',life:13,r:5.5});f.x=rand(W*.2,W*.8);f.y=rand(H*.22,H*.66);
+  log('goldseen');G.exclT=1.2;G.act={k:'peek',f,t:0,dur:1.1};SND.happy();G.encDir=Math.random()<.5?1:-1;localSay('goldseen',true);
+  showHint('gold','靠近它，AI 会绕过去，用绳子把它圈起来',f.x,f.y+48*S,5);
+}
+function spawnMist(){
+  const prog=clamp(G.t/90,0,1);
+  for(let tries=0;tries<40;tries++){
+    const r=rand(24,36)*S,x=rand(W*.06,W*.94),y=rand(H*.14,H*.9);
+    if(insideMass(x,y,r*1.1))continue;
+    if(Math.hypot(x-G.h.x,y-G.h.y)<150*S||Math.hypot(x-G.ai.x,y-G.ai.y)<120*S)continue;
+    if(rope.length&&ropeDist(x,y).d<r+50*S)continue;
+    const a=rand(0,6.283),sp=[40,60,80][G.phase]*S*rand(.85,1.15);
+    G.mists.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,sp,r,ph:rand(0,6),dead:0,age:0,life:rand(10,15),sq:0,sqa:0,
+      hairs:Array.from({length:110},()=>[Math.random()*6.283,rand(0,1)])});
+    return true;
+  }
+  return false;
+}
+
+/* ---------- the AI: plans, moods, little acts ---------- */
+function planAI(){
+  const ST=STYLE();
+  const h=G.h,ai=G.ai,maxL=MAXL()*.86,m=24*S;
+  let best=null,bc=1e9,nearest=null,nd=1e9;
+  for(const f of G.flies){
+    if(f.out)continue;
+    const fx=f.x+f.vx*.4,fy=f.y+f.vy*.4,dx=fx-h.x,dy=fy-h.y,d=Math.hypot(dx,dy);
+    const bias=G.ping?Math.hypot(fx-G.ping.x,fy-G.ping.y)*.9:0,prio=f.kind==='gold'?400*(.5+ST.bold):0;
+    if(d+bias*.3-prio<nd){nd=d+bias*.3-prio;nearest=f}
+    if(d<8*S||d>maxL-26*S)continue;
+    const L=Math.min(d+90*S,maxL);
+    const px=clamp(h.x+dx/d*L,m,W-m),py=clamp(h.y+dy/d*L,m+60,H-m);
+    if(segDist(fx,fy,h.x,h.y,px,py)>7*S)continue;
+    let c=Math.hypot(px-ai.x,py-ai.y)+d*.3+bias-prio;
+    for(const s of G.mists){if(s.dead)continue;for(const k of [0,.5,1])if(segDist(s.x+s.vx*k,s.y+s.vy*k,h.x,h.y,px,py)<s.r+(10+26*(1-ST.bold))*S){c+=300+800*(1-ST.bold);break}}
+    if(f.life-f.age<2)c-=50;
+    if(c<bc){bc=c;best={x:px,y:py,f}}
+  }
+  if(best&&bc<700)return best;
+  if(G.ping)return {x:clamp(G.ping.x,m,W-m),y:clamp(G.ping.y,m+60,H-m),f:null};
+  if(nearest){const dx=nearest.x-h.x,dy=nearest.y-h.y,d=Math.hypot(dx,dy)||1;
+    if(d>maxL-26*S){const L=maxL*.8;return {x:clamp(h.x+dx/d*L,m,W-m),y:clamp(h.y+dy/d*L,m+60,H-m),f:nearest}}}
+  const a=G.t*.5;return {x:clamp(h.x+Math.cos(a)*120*S,m,W-m),y:clamp(h.y+Math.sin(a)*80*S,m+60,H-m),f:null};
+}
+function dangerSoon(){
+  const h=G.h,ai=G.ai;
+  for(const s of G.mists){if(s.dead)continue;for(const k of [.15,.35,.6])if(segDist(s.x+s.vx*k,s.y+s.vy*k,h.x,h.y,ai.x,ai.y)<s.r+(4+18*(1-STYLE().bold))*S)return s}
+  return null;
+}
+function celebrate(){G.act={k:'orbit',t:0,dur:1.35,a0:Math.atan2(G.ai.y-G.h.y,G.ai.x-G.h.x)};G.happyT=1.6;G.bounceT=.5;SND.happy();log('orbit')}
+function updateAI(dt){
+  const ai=G.ai,h=G.h,R=orbR();
+  G.planT-=dt;if(G.planT<=0){G.plan=planAI();G.planT=.22}
+  let tx=G.plan.x,ty=G.plan.y,spMul=1;
+  if(G.broken&&G.down==='ai'){ai.vx=ai.vy=0;return}
+  const carriedAI=G.carry&&G.carry.who==='ai';
+  const dz=(G.mode==='play'&&!G.broken)?dangerSoon():null;
+  const nowWorry=!!dz;if(nowWorry&&!G.worry&&G.worryCd<=0){SND.worry();G.worryCd=3;localSay('danger',true)}G.worry=nowWorry;G.worryMist=dz;
+  if(carriedAI){const dx=ai.x-h.x,dy=ai.y-h.y,d=Math.hypot(dx,dy)||1,L=ROPE()*.5;tx=ai.x;ty=ai.y;if(d>L){tx=h.x+dx/d*L;ty=h.y+dy/d*L}spMul=1.2}
+  else if(G.slings>0&&!G.broken&&!G.act&&(G.slingP=pressOf(h))){
+    const P=G.slingP,th2=P.th+.2,r=massR(P.m,th2)-Math.max(20*S,P.dep);tx=P.m.cx+Math.cos(th2)*r;ty=P.m.cy+Math.sin(th2)*r;spMul=1.3}
+  else if(G.act){
+    const A=G.act;A.t+=dt;
+    if(A.k==='orbit'){const a=A.a0+A.t*4.8;tx=h.x+Math.cos(a)*74*S;ty=h.y+Math.sin(a)*74*S;spMul=2.4}
+    else if(A.k==='nuzzle'){const dx=ai.x-h.x,dy=ai.y-h.y,d=Math.hypot(dx,dy)||1,o=R*2.2+Math.sin(A.t*9)*4*S;tx=h.x+dx/d*o;ty=h.y+dy/d*o;spMul=.7}
+    else if(A.k==='hop'){tx=A.x;ty=A.y;spMul=1.4}
+    else if(A.k==='peek'&&A.f&&!A.f.out){tx=ai.x+(A.f.x-ai.x)*.4;ty=ai.y+(A.f.y-ai.y)*.4}
+    if(A.t>A.dur)G.act=null;
+  }else if(G.goldF&&!G.broken){ // circle the golden firefly so the rope wraps around it, then come back to close the loop
+    const f=G.goldF,dh=Math.hypot(h.x-f.x,h.y-f.y);
+    if(f.enclosed){const dx=ai.x-h.x,dy=ai.y-h.y,d=Math.hypot(dx,dy)||1;tx=h.x+dx/d*R*1.4;ty=h.y+dy/d*R*1.4;spMul=.6}
+    else if(dh<110*S){const a=Math.atan2(ai.y-f.y,ai.x-f.x)+G.encDir*.9,r=38*S;tx=f.x+Math.cos(a)*r;ty=f.y+Math.sin(a)*r;spMul=1.1}
+    else{const dx=f.x-h.x,dy=f.y-h.y,d=Math.hypot(dx,dy)||1;tx=f.x+dx/d*30*S;ty=f.y+dy/d*30*S;spMul=G.lead>.5?.5:1}
+  }else if(G.lead>.5&&!G.broken){ // tow you past the nearest firefly so the rope sweeps it
+    let best=null,bd=1e9;for(const f of G.flies){if(f.out||f.kind!=='n')continue;const d=Math.hypot(f.x-ai.x,f.y-ai.y)+Math.hypot(f.x-h.x,f.y-h.y)*.5;if(d<bd){bd=d;best=f}}
+    if(best){const dx=best.x-h.x,dy=best.y-h.y,d=Math.hypot(dx,dy)||1,o=Math.max(70*S,ROPE()*.6-d);tx=best.x+dx/d*o;ty=best.y+dy/d*o}
+    spMul=.42;
+  }else if(G.broken){ // hurry back to you so you can tie the line again
+    const dx=ai.x-h.x,dy=ai.y-h.y,d=Math.hypot(dx,dy)||1;tx=h.x+dx/d*R*1.6;ty=h.y+dy/d*R*1.6;spMul=G.t-G.brokeT<.7?.2:1.1;
+  }else if(G.sleepy){const dx=ai.x-h.x,dy=ai.y-h.y,d=Math.hypot(dx,dy)||1;tx=h.x+dx/d*R*3;ty=h.y+dy/d*R*3+Math.sin(G.t*1.2)*3*S;spMul=.4}
+  if(dz&&!carriedAI&&!(G.act&&G.act.k==='orbit')){
+    const lx=ai.x-h.x,ly=ai.y-h.y,L=Math.hypot(lx,ly)||1,side=Math.sign((dz.x-h.x)*ly-(dz.y-h.y)*lx)||1;
+    const ang=Math.atan2(ly,lx)+side*1.1,Rr=Math.max(MINL()*1.6,L*.55);tx=h.x+Math.cos(ang)*Rr;ty=h.y+Math.sin(ang)*Rr;
+  }
+  for(const s of G.mists){if(s.dead)continue;const dx=ai.x-s.x,dy=ai.y-s.y,d=Math.hypot(dx,dy);if(d<s.r+60*S){tx+=dx/d*90*S;ty+=dy/d*90*S}}
+  if(G.dizzyT>0){tx+=Math.cos(G.t*7)*40*S;ty+=Math.sin(G.t*9)*30*S;spMul=.8}
+  const dx=tx-ai.x,dy=ty-ai.y,d=Math.hypot(dx,dy)||1,sp=Math.min(320*S*spMul*(.85+.4*STYLE().energy)*(1-.55*G.windAmt),d*(spMul>1?9:5)),k=Math.min(1,dt*7);
+  ai.vx+=(dx/d*sp-ai.vx)*k;ai.vy+=(dy/d*sp-ai.vy)*k;
+  ai.x+=ai.vx*dt;ai.y+=ai.vy*dt;
+  if(G.strain=G.tension>.55){ai.x+=Math.sin(G.t*30)*1.4*S;}
+}
+function aiFace(){
+  if(G.broken&&G.down==='ai')return 'frozen';
+  if(G.broken&&G.t-G.brokeT<.9)return 'worry';
+  if(G.dizzyT>0)return 'dizzy';if(G.sleepy)return 'sleepy';if(G.tension>.55)return 'strain';
+  if(G.worry)return 'worry';if(G.happyT>0)return 'happy';return 'calm';
+}
+
+/* ---------- effects ---------- */
+const RING_COLS=['#f3ffc0','#fff6e6','#ffc4a8','#ffffff'];
+const PETAL_COLS=['#efffa8','#f8ffd0','#fff3dc','#ffffff','#ffe29a'];
+function fxRings(x,y,n,cols,size){for(let i=0;i<n;i++)G.fx.push({k:'ring',x,y,t:-i*.08,dur:.75,r0:6*S,r1:(size+i*14)*S,col:cols[i%cols.length],w:2})}
+function fxPetals(x,y,n,cols,spd){n=reduce?Math.ceil(n/3):n;
+  for(let i=0;i<n;i++){const a=rand(0,6.28),v=rand(.4,1)*spd*S;
+    G.fx.push({k:'petal',x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,rot:rand(0,6),vr:rand(-4,4),t:0,dur:rand(.7,1.1),col:pick(cols),s:rand(2.5,4.5)*S,sh:Math.random()<.5})}}
+function fxMote(x,y,col){const r=$('score').getBoundingClientRect();G.fx.push({k:'mote',x0:x,y0:y,x1:r.left+r.width/2,y1:r.top+r.height/2,t:0,dur:.75,col})}
+function fxText(x,y,txt,col,big){G.fx.push({k:'text',x,y,t:0,dur:big?1.6:1.1,txt,col,big})}
+const TIERS=[
+  {cols:['#efffa8','#f8ffd0','#ffffff','#fff1c8'],txt:'#fffaf0'},
+  {cols:['#ffd0b8','#fff1c8','#ffffff','#ffb59a','#efffa8'],txt:'#fff4ec'},
+  {cols:['#ffc1d6','#ffe3ee','#ffffff','#e9a8e0','#ffd0b8'],txt:'#fff2f7'},
+  {cols:['#ffd56e','#fff1c0','#ffffff','#ffb48a','#ffe9a0'],txt:'#fff8e0'}];
+const MILESTONE_WORDS=['好默契','超合拍','心有灵犀','天作之合','无人能挡'];
+function fxRays(x,y,n,cols,len){const a0=rand(0,6.28);for(let i=0;i<n;i++)G.fx.push({k:'ray',x,y,a:a0+i/n*6.283+rand(-.12,.12),len:len*rand(.75,1.2),w:rand(3,6)*S,col:cols[i%cols.length],t:0,dur:.5})}
+function fxConfetti(x,y,n,cols,spd){n=reduce?Math.ceil(n/3):n;for(let i=0;i<n;i++){const a=rand(0,6.283),v=rand(.35,1)*spd*S;
+  G.fx.push({k:'conf',x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v-rand(20,80)*S,rot:rand(0,6),vr:rand(-8,8),t:0,dur:rand(.9,1.4),col:pick(cols),s:rand(3,6)*S,sh:pick(['dot','dia','star','dot'])})}}
+function fxPop(x,y,txt,col,size){G.fx.push({k:'pop',x,y,txt,col,size,t:0,dur:1.1})}
+function fxWave(x,y,col,delay){G.fx.push({k:'wave',x,y,col,t:-(delay||0),dur:1.1,max:Math.hypot(W,H)})}
+function fxFlash(col,a){G.fx.push({k:'flash',col,a,t:0,dur:.5})}
+function fxBig(txt,sub,col){G.fx.push({k:'big',txt,sub,col,t:0,dur:1.8})}
+function star4(x,y,r,rot,fill){ctx.save();ctx.translate(x,y);ctx.rotate(rot);ctx.fillStyle=fill;ctx.beginPath();for(let i=0;i<8;i++){const a=i*Math.PI/4,rr=i%2?r*.36:r;ctx.lineTo(Math.cos(a)*rr,Math.sin(a)*rr)}ctx.closePath();ctx.fill();ctx.restore()}
+function updateFx(dt){
+  for(const e of G.fx){e.t+=dt;
+    if(e.k==='petal'){e.x+=e.vx*dt;e.y+=e.vy*dt;e.vx*=.95;e.vy=e.vy*.95-10*S*dt;e.rot+=e.vr*dt}
+    if(e.k==='conf'){e.x+=e.vx*dt;e.y+=e.vy*dt;e.vx*=.985;e.vy=e.vy*.985+260*S*dt;e.rot+=e.vr*dt}
+    if(e.k==='mote'&&e.t<e.dur){e.sp=(e.sp||0)-dt;if(e.sp<=0){e.sp=.025;const k=clamp(e.t/e.dur,0,1),ease=k*k*(3-2*k);
+      G.fx.push({k:'dot',x:e.x0+(e.x1-e.x0)*ease+rand(-3,3)*S,y:e.y0+(e.y1-e.y0)*ease-Math.sin(k*Math.PI)*80*S+rand(-3,3)*S,r:rand(1.5,3)*S,col:e.col,t:0,dur:.4})}}
+    if(e.k==='mote'&&e.t>=e.dur&&!e.done){e.done=1;const el=$('score');el.classList.remove('bump');void el.offsetWidth;el.classList.add('bump');fxConfetti(e.x1,e.y1,6,[e.col,'#ffffff'],60)}}
+  G.fx=G.fx.filter(e=>e.t<e.dur+.05);
+}
+function drawFx(){
+  for(const e of G.fx){if(e.t<0)continue;const k=clamp(e.t/e.dur,0,1);
+    if(e.k==='ring'){const ease=1-Math.pow(1-k,3);ctx.strokeStyle=rgba(e.col,1-k);ctx.lineWidth=e.w*(1-k*.5);ctx.beginPath();ctx.arc(e.x,e.y,e.r0+(e.r1-e.r0)*ease,0,7);ctx.stroke()}
+    else if(e.k==='petal'){ctx.save();ctx.translate(e.x,e.y);ctx.rotate(e.rot);ctx.fillStyle=rgba(e.col,1-k);
+      if(e.sh){ctx.beginPath();ctx.ellipse(0,0,e.s*1.4,e.s*.6,0,0,7);ctx.fill()}else ctx.fillRect(-e.s/2,-e.s/2,e.s,e.s);ctx.restore()}
+    else if(e.k==='mote'){const ease=k*k*(3-2*k),x=e.x0+(e.x1-e.x0)*ease,y=e.y0+(e.y1-e.y0)*ease-Math.sin(k*Math.PI)*80*S;
+      circle(x,y,7*S*(1-k*.5),rgba(e.col,.35));circle(x,y,3*S,e.col)}
+    else if(e.k==='ray'){const ease=1-Math.pow(1-k,2),r1=e.len*ease,r0=e.len*ease*.35+4*S,w=e.w*(1-k),ca=Math.cos(e.a),sa=Math.sin(e.a),px=-sa*w/2,py=ca*w/2;
+      ctx.fillStyle=rgba(e.col,1-k*k);ctx.beginPath();ctx.moveTo(e.x+ca*r0+px,e.y+sa*r0+py);ctx.lineTo(e.x+ca*r1,e.y+sa*r1);ctx.lineTo(e.x+ca*r0-px,e.y+sa*r0-py);ctx.closePath();ctx.fill()}
+    else if(e.k==='conf'){const al=1-Math.max(0,(k-.6)/.4);
+      if(e.sh==='dot')circle(e.x,e.y,e.s*.55,rgba(e.col,al));else if(e.sh==='star')star4(e.x,e.y,e.s,e.rot,rgba(e.col,al));
+      else{ctx.save();ctx.translate(e.x,e.y);ctx.rotate(e.rot);ctx.fillStyle=rgba(e.col,al);ctx.beginPath();ctx.moveTo(0,-e.s*.8);ctx.lineTo(e.s*.45,0);ctx.lineTo(0,e.s*.8);ctx.lineTo(-e.s*.45,0);ctx.closePath();ctx.fill();ctx.restore()}}
+    else if(e.k==='dot')circle(e.x,e.y,e.r*(1-k),rgba(e.col,.8*(1-k)));
+    else if(e.k==='pop'){const sc=k<.12?.5+k/.12*1.1:k<.25?1.6-(k-.12)/.13*.6:1;ctx.globalAlpha=clamp(1-(k-.65)/.35,0,1);
+      ctx.font=`500 ${Math.round(e.size*sc*Math.max(S,.9))}px "Noto Serif SC",serif`;ctx.textAlign='center';ctx.fillStyle=e.col;ctx.fillText(e.txt,e.x,e.y-16*S-k*30*S);ctx.globalAlpha=1}
+    else if(e.k==='wave'){const ease=1-Math.pow(1-k,3);ctx.strokeStyle=rgba(e.col,.55*(1-k));ctx.lineWidth=16*S*(1-k)+1;ctx.beginPath();ctx.arc(e.x,e.y,e.max*ease,0,7);ctx.stroke()}
+    else if(e.k==='flash'){ctx.fillStyle=rgba(e.col,e.a*(1-k));ctx.fillRect(-30,-30,W+60,H+60)}
+    else if(e.k==='big'){const sc=k<.1?.3+k/.1:k<.2?1.3-(k-.1)*3:1;ctx.globalAlpha=clamp(1-(k-.7)/.3,0,1);ctx.textAlign='center';ctx.fillStyle=e.col;
+      ctx.font=`300 ${Math.round(46*sc*Math.max(S,.8))}px "Noto Serif SC",serif`;ctx.fillText(e.txt,W/2,H*.34);
+      ctx.font=`400 ${Math.round(15*Math.max(S,.9))}px "Noto Sans SC",system-ui,sans-serif`;ctx.fillText(e.sub,W/2,H*.34+34*Math.max(S,.8));ctx.globalAlpha=1}
+    else if(e.k==='text'){ctx.globalAlpha=clamp(k<.15?k/.15:1-(k-.6)/.4,0,1);
+      ctx.font=`300 ${Math.round((e.big?28:18)*Math.max(S,.9))}px "Noto Serif SC",serif`;ctx.textAlign='center';ctx.fillStyle=e.col;
+      ctx.fillText(e.txt,e.x,e.y-12-k*26*S);ctx.globalAlpha=1}}
+}
+
+/* ---------- catching ---------- */
+const threadLen=()=>Math.hypot(G.ai.x-G.h.x,G.ai.y-G.h.y);
+const lit=()=>!G.broken&&threadLen()>MINL();
+// is (x,y) inside the loop the rope makes, closed by the short gap between the two of you?
+function inPoly(x,y,pts){let inside=false;
+  for(let i=0,j=pts.length-1;i<pts.length;j=i++){const a=pts[i],b=pts[j];if((a.y>y)!==(b.y>y)&&x<(b.x-a.x)*(y-a.y)/(b.y-a.y)+a.x)inside=!inside}
+  return inside}
+function segX(a,b,c,d){const r1=b.x-a.x,r2=b.y-a.y,s1=d.x-c.x,s2=d.y-c.y,den=r1*s2-r2*s1;if(Math.abs(den)<1e-9)return null;
+  const t=((c.x-a.x)*s2-(c.y-a.y)*s1)/den,u=((c.x-a.x)*r2-(c.y-a.y)*r1)/den;return t>0&&t<1&&u>0&&u<1?{x:a.x+t*r1,y:a.y+t*r2}:null}
+function ropeEncloses(x,y){
+  if(G.broken||rope.length!==N+1)return false;
+  // the two of you meet, closing the rope into a ring
+  if(threadLen()<orbR()*5.5&&inPoly(x,y,rope))return true;
+  // or the rope crosses over itself and the little loop holds it
+  for(let i=0;i<N-2;i++)for(let j=i+2;j<N;j++){const X=segX(rope[i],rope[i+1],rope[j],rope[j+1]);
+    if(X&&inPoly(x,y,[X,...rope.slice(i+1,j+1)]))return true}
+  return false;
+}
+function catchFly(f,rd){
+  f.out=-1;
+  pluck(rd.i,G.mode==='play'?7:4);
+  if(G.mode!=='play'){fxRings(rd.x,rd.y,1,RING_COLS,24);fxConfetti(rd.x,rd.y,6,TIERS[0].cols,90);return}
+  G.combo++;G.comboT=2.4;G.maxCombo=Math.max(G.maxCombo,G.combo);G.happyT=Math.max(G.happyT,.7);G.bounceT=Math.max(G.bounceT,.35);
+  const pts=(1+Math.floor((G.combo-1)/3))*(G.phase===2?2:1);G.score+=pts;G.catches++;
+  if(G.sling)G.sling.got++;
+  else if(G.catches>=G.nextSling){G.nextSling+=SLING_EVERY;G.slings=Math.min(3,G.slings+1);SND.happy();fxPop(rd.x,rd.y-34*S,'弹弓 +1','#fff6dc',18);localSay('slingReady',true);
+    showHint('sling','弹弓就绪：钻进一团色团里，AI 会过来和你一起挤',0,0,5)}G.warm=Math.min(.3,G.warm+.005*pts);
+  const tier=G.combo>=15?3:G.combo>=10?2:G.combo>=5?1:0,T=TIERS[tier];
+  fxRays(rd.x,rd.y,8+tier*3,T.cols,(34+tier*12)*S);fxRings(rd.x,rd.y,1+tier,T.cols,30);fxConfetti(rd.x,rd.y,10+tier*6,T.cols,150+tier*30);
+  fxMote(rd.x,rd.y,T.cols[0]);fxPop(rd.x,rd.y,'+'+pts,T.txt,20+tier*4);
+  const nm=nearestMass(rd.x,rd.y);if(nm)addBump(nm.m,nm.th,.012+tier*.004);
+  SND.catch(G.combo);log('catch',G.combo);
+  if(G.combo%5===0)milestone(rd.x,rd.y,T);else if(Math.random()<.45)localSay('catch');
+  updateHud();
+}
+// every 5 in a row: a wave across the screen, confetti, the masses bounce, the AI circles you
+function milestone(x,y,T){
+  const i=Math.min(G.combo/5-1,MILESTONE_WORDS.length-1);
+  fxWave(x,y,T.cols[0]);fxWave(x,y,'#ffffff',.14);fxFlash(T.cols[0],.16);fxBig(`连续 ${G.combo}`,MILESTONE_WORDS[i],'#fffaf4');
+  fxConfetti(W/2,H*.34,40,T.cols,320);jiggleAll(.55);SND.milestone();celebrate();G.shake=reduce?0:.12;localSay('combo',true);$('comboPill').classList.remove('pop');void $('comboPill').offsetWidth;$('comboPill').classList.add('pop');
+}
+function catchGold(f){
+  f.out=-1;const rd=ropeDist(f.x,f.y);pluck(rd.i,12);
+  G.combo++;G.comboT=2.4;G.maxCombo=Math.max(G.maxCombo,G.combo);
+  G.score+=5;G.gold++;G.warm=Math.min(.3,G.warm+.04);G.free=FREE_DUR;
+  const GC=TIERS[3].cols;
+  fxRays(rd.x,rd.y,16,GC,70*S);fxRings(rd.x,rd.y,5,GC,40);fxConfetti(rd.x,rd.y,50,GC,260);fxWave(rd.x,rd.y,'#ffd56e');fxWave(rd.x,rd.y,'#ffffff',.14);
+  fxFlash('#ffd56e',.22);fxMote(rd.x,rd.y,'#ffd56e');fxPop(rd.x,rd.y,'+5','#fff6dc',30);fxBig('金色萤火','线变成了金线，可以无限拉长','#fff8e0');jiggleAll(.7);
+  SND.gold();celebrate();log('gold');think('gold');G.flags.loopSaid=0;updateHud();
+}
+// a mist cuts the line where it touched; the two halves hang until you meet and tie them again
+// a mist cuts the line; whoever's half it touched freezes on the spot until the other comes to the rescue
+function breakThread(i,who){
+  who=who||(i<N/2?'you':'ai');
+  G.broken=true;G.down=who;G.carry=null;G.cut=clamp(i,1,N-2);G.brokeT=G.t;G.combo=0;G.happyT=0;G.act=null;G.sleepy=false;
+  G.snaps++;G.shake=reduce?0:.3;SND.snap();log(who==='you'?'freezeYou':'freezeAI');
+  if(who==='you')think('snap');
+  else{G.ai.vx=G.ai.vy=0;localSay('frozen',true)}
+}
+function retie(){
+  const who=G.down;G.broken=false;G.down=null;G.reties++;
+  G.carry={who,t:5};if(who==='you')G.lead=1;log(who==='you'?'carryYou':'carryAI');
+  const mx=(G.h.x+G.ai.x)/2,my=(G.h.y+G.ai.y)/2;
+  fxRings(mx,my,2,['#f3ffc0','#ffffff','#ffd0b8'],30);fxPetals(mx,my,10,['#efffa8','#fff6d0','#ffffff','#ffc6ad'],70);fxText(mx,my-10,'接上了','#fffaf0');
+  G.happyT=1.4;G.bounceT=.5;SND.knot();log('retie');localSay(who==='you'?'carryYou':'carryAI',true);pluck(G.cut,6);
+}
+// the firefly king: earned in the first two phases, it patrols the rope and knocks the mists away
+function checkKing(){
+  if(G.catches>=KING_NEED){const p=ropeAt(.5);G.king={x:p.x,y:p.y,vx:0,vy:0,t:0};
+    fxWave(p.x,p.y,'#ffd56e');fxFlash('#ffe9a0',.18);fxBig('萤火虫王','它会沿着绳子巡逻，替你们赶走冷雾','#fff8e0');SND.king();jiggleAll(.5);localSay('king',true);log('king')}
+  else{log('kingMiss');showHint('kingMiss',`还差 ${KING_NEED-G.catches} 只就能召唤萤火虫王`,0,0,3.5)}
+}
+// the slingshot: both of you press into the same furry mass, it dents, then flings you across the night
+function pressOf(o){for(const m of masses){const dx=o.x-m.cx,dy=o.y-m.cy,d=Math.hypot(dx,dy),th=Math.atan2(dy,dx),dep=massR(m,th)-d;if(dep>4*S&&dep<120*S)return {m,th,dep}}return null}
+function slingCheck(dt){
+  if(!G.slings||G.sling||G.broken){G.slingCharge=0;if(G.pressM){G.pressM.press=null;G.pressM=null}return}
+  const a=pressOf(G.h),b=pressOf(G.ai);
+  if(a&&b&&a.m===b.m&&threadLen()<170*S){
+    const th=Math.atan2(Math.sin(a.th)+Math.sin(b.th),Math.cos(a.th)+Math.cos(b.th));
+    G.slingCharge+=dt;G.pressM=a.m;a.m.press={th,a:clamp(G.slingCharge/.7,0,1)};
+    if(G.slingCharge>=.7)launchSling(a.m,th);
+  }else{G.slingCharge=Math.max(0,G.slingCharge-dt*2);if(G.pressM){G.pressM.press=null;G.pressM=null}}
+}
+function launchSling(m,th){
+  m.press=null;G.pressM=null;G.slingCharge=0;G.slings--;G.slingsUsed++;addBump(m,th,.06);m.sv+=.6;
+  const nx=Math.cos(th),ny=Math.sin(th),sp=1000*S,sd=230*S;
+  G.sling={t:0,dur:3.2,got:0,vh:{x:nx*sp-ny*sd,y:ny*sp+nx*sd},va:{x:nx*sp+ny*sd,y:ny*sp-nx*sd}};
+  fxWave(G.h.x,G.h.y,'#ffffff');fxFlash('#ffffff',.22);fxBig('弹弓！','一口气清空萤火虫','#fffaf4');SND.sling();jiggleAll(.5);G.shake=reduce?0:.25;localSay('sling',true);log('sling');
+}
+function updateSling(dt){
+  const L=G.sling;L.t+=dt;const k=L.t/L.dur,minSp=(k<.8?680:0)*S;
+  for(const [o,v] of [[G.h,L.vh],[G.ai,L.va]]){
+    o.x+=v.x*dt;o.y+=v.y*dt;
+    if(o.x<14){o.x=14;v.x=Math.abs(v.x)}if(o.x>W-14){o.x=W-14;v.x=-Math.abs(v.x)}if(o.y<14){o.y=14;v.y=Math.abs(v.y)}if(o.y>H-14){o.y=H-14;v.y=-Math.abs(v.y)}
+    if(L.t>.25)for(const m of masses){const dx=o.x-m.cx,dy=o.y-m.cy,d=Math.hypot(dx,dy)||1,th=Math.atan2(dy,dx),r=massR(m,th);
+      if(d<r&&d>r-70*S){const nx=dx/d,ny=dy/d,vn=v.x*nx+v.y*ny;if(vn<0){v.x-=2*vn*nx;v.y-=2*vn*ny;addBump(m,th,-.03);fxRings(o.x,o.y,1,['#ffffff'],22);if(G.boingCd<=0){SND.boing();G.boingCd=.08}}}}
+    const sp=Math.hypot(v.x,v.y)||1;if(sp<minSp){v.x*=minSp/sp;v.y*=minSp/sp}if(k>.8){v.x*=.93;v.y*=.93}
+    o.vx=v.x;o.vy=v.y;
+  }
+  // the rope acts like an elastic band between you
+  const dx=G.ai.x-G.h.x,dy=G.ai.y-G.h.y,d=Math.hypot(dx,dy)||1,RL=ROPE()*1.1;
+  if(d>RL){const ux=dx/d,uy=dy/d,e=(d-RL)/2;G.h.x+=ux*e;G.h.y+=uy*e;G.ai.x-=ux*e;G.ai.y-=uy*e;
+    const rv=(L.va.x-L.vh.x)*ux+(L.va.y-L.vh.y)*uy;if(rv>0){L.vh.x+=ux*rv*.5;L.vh.y+=uy*rv*.5;L.va.x-=ux*rv*.5;L.va.y-=uy*rv*.5}}
+  G.h.vx=L.vh.x;G.h.vy=L.vh.y;
+  if(L.t>=L.dur){ // sweep up every firefly still on screen
+    for(const f of G.flies)if(!f.out&&f.kind==='n')catchFly(f,ropeDist(f.x,f.y));
+    fxBig('清空！',`这一弹收了 ${L.got} 只`,'#fffaf4');log('slingDone',L.got);G.sling=null;G.slingEase=1;
+  }
+}
+function drawKing(){
+  const k=G.king;if(!k)return;const R=KING_R(),p=.5+.5*Math.sin(G.t*3);
+  circle(k.x,k.y,R,'rgba(255,214,110,.06)');
+  ctx.strokeStyle='rgba(255,233,160,.5)';ctx.lineWidth=1.5;ctx.setLineDash([4,7]);ctx.beginPath();ctx.arc(k.x,k.y,R,G.t*.6,G.t*.6+6.283);ctx.stroke();ctx.setLineDash([]);
+  drawFirefly({x:k.x,y:k.y,vx:k.vx||1,vy:k.vy||0,wx:0,wy:0,ph:G.t,age:9,out:0,kind:'king',fl:.6+.4*p,trail:[],hold:0});
+  const c=4.5*S;ctx.fillStyle='#ffd56e';ctx.beginPath();ctx.moveTo(k.x-2*c,k.y-4*c);ctx.lineTo(k.x-2*c,k.y-6*c);ctx.lineTo(k.x-c,k.y-5*c);ctx.lineTo(k.x,k.y-6.6*c);ctx.lineTo(k.x+c,k.y-5*c);ctx.lineTo(k.x+2*c,k.y-6*c);ctx.lineTo(k.x+2*c,k.y-4*c);ctx.closePath();ctx.fill();
+}
+function sendPing(x,y){
+  if(G.mode!=='play')return;
+  G.ping={x,y,t:4.5};G.pings++;G.planT=0;G.ripples.push({x,y,t:0});log('ping');
+  G.act={k:'hop',x:clamp(x,20,W-20),y:clamp(y,80,H-20),t:0,dur:.8};G.bounceT=.45;G.exclT=.6;SND.ping();
+}
+
+/* ---------- update ---------- */
+let lastSec=-1;
+function update(dt){
+  G.t+=dt;G.localCd-=dt;G.happyT-=dt;G.dizzyT-=dt;G.bounceT-=dt;G.exclT-=dt;G.worryCd-=dt;G.bumpCd-=dt;
+  if(G.bubble){G.bubble.t+=dt;if(G.bubble.t>G.bubble.dur)G.bubble=null}
+  if(G.hint){G.hint.t+=dt;if(G.hint.t>G.hint.dur)G.hint=null}
+  if(G.shake>0)G.shake-=dt;
+  if(G.ping){G.ping.t-=dt;if(G.ping.t<=0)G.ping=null}
+  if(G.banner){G.banner.t+=dt;if(G.banner.t>3)G.banner=null}
+  G.blinkT-=dt;if(G.blinkT<=0){G.blink=.14;G.blinkT=rand(2.4,5)}G.blink-=dt;
+  const prog=G.mode==='play'?clamp(G.t/90,0,1):0;
+  G.dawn+=((G.mode==='play'?.12+.6*prog+G.warm:($('over').hidden?.12:.95))-G.dawn)*Math.min(1,dt*(G.mode==='play'?1.5:.3));
+
+  // wind
+  G.windAmt=0;G.boingCd-=dt;
+  const wa=G.t*.18,gust=.65+.35*Math.sin(G.t*1.1)*Math.sin(G.t*.37);
+  G.wind.x=(Math.cos(wa)>=0?1:-1)*(.6+.4*Math.abs(Math.cos(wa)))*95*S*G.windAmt*gust;G.wind.y=Math.sin(wa*1.7)*26*S*G.windAmt*gust;
+  G.windDrift+=G.wind.x*.0004*dt*60;G.windDrift*=.995;
+
+  // you
+  if(G.mode!=='play'){G.menuT+=dt;G.ptr.x=W*.5+Math.cos(G.menuT*.33)*Math.min(W*.3,260*S);G.ptr.y=H*.74+Math.sin(G.menuT*.5)*H*.05}
+  else{const ks=380*S*dt,k=G.keys;
+    if(k.ArrowLeft||k.a)G.ptr.x-=ks;if(k.ArrowRight||k.d)G.ptr.x+=ks;if(k.ArrowUp||k.w)G.ptr.y-=ks;if(k.ArrowDown||k.s)G.ptr.y+=ks;
+    if(k.ArrowLeft||k.ArrowRight||k.ArrowUp||k.ArrowDown||k.a||k.d||k.w||k.s)wakeUp();
+    G.ptr.x=clamp(G.ptr.x,8,W-8);G.ptr.y=clamp(G.ptr.y,8,H-8)}
+  const px=G.h.x,py=G.h.y;
+  const frozenYou=G.mode==='play'&&G.broken&&G.down==='you',carriedYou=G.mode==='play'&&G.carry&&G.carry.who==='you';
+  if(G.mode==='play'&&G.carry){G.carry.t-=dt;if(G.carry.t<=0)G.carry=null}
+  const leadOn=G.mode==='play'&&!G.broken&&(G.idleT>1.4||carriedYou);
+  G.lead+=((leadOn?1:0)-G.lead)*Math.min(1,dt*(leadOn?1.2:7));
+  G.slingEase=Math.max(0,G.slingEase-dt*1.5);
+  const hk=(frozenYou||G.sling)?0:Math.min(1,dt*(G.mode==='play'?14*(1-G.lead):3))*(1-G.slingEase*.85);
+  G.h.x+=(G.ptr.x-G.h.x)*hk+G.wind.x*.45*dt;G.h.y+=(G.ptr.y-G.h.y)*hk+G.wind.y*.45*dt;
+
+  if(G.mode==='play'){
+    // shaking you back and forth makes the AI dizzy
+    const vx=(G.h.x-px)/Math.max(dt,1e-3);
+    if(!G.sling&&G.slingEase<=0&&Math.abs(vx)>420*S){const sg=Math.sign(vx);if(G.rev.sign&&sg!==G.rev.sign)G.rev.times.push(G.t);G.rev.sign=sg}
+    G.rev.times=G.rev.times.filter(t=>t>G.t-1.3);
+    if(G.rev.times.length>=4&&G.dizzyT<=0){G.dizzyT=2;G.rev.times=[];SND.dizzy();think('dizzy');log('dizzy')}
+    // you stop moving: the AI takes the lead and tows you toward the light
+    G.idleT+=dt;
+    if(G.lead>.5&&!G.flags.leadSaid){G.flags.leadSaid=1;G.happyT=1;SND.happy();localSay('lead',true);log('lead')}
+    // it keeps talking: a line every few seconds when nothing else was said
+    if(G.t-G.lastSayT>6.5-4.5*STYLE().chatty&&!G.bubble&&!G.inflight)localSay(G.lead>.5?'lead':'cheer');
+    // bump into it and it giggles
+    const dx=G.ai.x-G.h.x,dy=G.ai.y-G.h.y,d=Math.hypot(dx,dy)||1,toward=((G.h.x-px)*dx+(G.h.y-py)*dy)/d/Math.max(dt,1e-3);
+    if(d<orbR()*2.4&&toward>260*S&&G.bumpCd<=0&&!G.sleepy){G.bumpCd=1.2;G.ai.vx+=dx/d*380*S;G.ai.vy+=dy/d*380*S;G.happyT=1.2;G.bounceT=.4;SND.giggle();
+      fxPetals(G.ai.x,G.ai.y,6,['#ffd0dc','#fff3dc','#ffffff'],60);log('bump')}
+  }
+  const hvx=(G.h.x-px)/Math.max(dt,1e-3),hvy=(G.h.y-py)/Math.max(dt,1e-3);G.h.vx+=(hvx-G.h.vx)*.3;G.h.vy+=(hvy-G.h.vy)*.3;
+
+  if(G.sling)updateSling(dt);else updateAI(dt);
+  G.ai.x+=G.wind.x*.45*dt;G.ai.y+=G.wind.y*.45*dt;
+  if(frozenYou){G.h.x=px;G.h.y=py}
+  // while you rest, the AI slowly reels you along behind it on the rope
+  if(G.mode==='play'&&G.lead>.3&&!G.broken&&!G.sling){
+    const dx=G.ai.x-G.h.x,dy=G.ai.y-G.h.y,d=Math.hypot(dx,dy)||1,want=d-ROPE()*.45;
+    if(want>0){const st=Math.min(want,(carriedYou?150:65+45*STYLE().energy)*S*dt*G.lead);G.h.x+=dx/d*st;G.h.y+=dy/d*st;G.tension=Math.max(G.tension,.35)}
+  }
+  if(!G.sling)ropeStep(dt);
+  G.h.x=clamp(G.h.x,8,W-8);G.h.y=clamp(G.h.y,8,H-8);G.ai.x=clamp(G.ai.x,10,W-10);G.ai.y=clamp(G.ai.y,10,H-10);
+  ropeSim(Math.min(dt,1/30));
+  if(G.free>0){G.free-=dt;if(G.free<=0)G.free=0}
+  if(G.mode==='play'){slingCheck(dt);
+    if(G.king){const p=ropeAt(.5+.42*Math.sin(G.t*1.2));G.king.vx=(p.x-G.king.x)*6;G.king.vy=(p.y-G.king.y)*6;G.king.x+=G.king.vx*dt;G.king.y+=G.king.vy*dt}}
+
+  // trails
+  G.trailT-=dt;if(G.trailT<=0){G.trailT=.03;
+    if(Math.hypot(G.h.vx,G.h.vy)>80*S)G.trailH.push({x:G.h.x,y:G.h.y,t:G.t});
+    if(Math.hypot(G.ai.vx,G.ai.vy)>80*S)G.trailA.push({x:G.ai.x,y:G.ai.y,t:G.t})}
+  // keep only points from the last 0.4s; a point from an earlier round (larger timestamp) is dropped, never drawn huge
+  const fresh=p=>{const a=G.t-p.t;return a>=0&&a<.4};
+  G.trailH=G.trailH.filter(fresh);G.trailA=G.trailA.filter(fresh);
+
+  if(G.mode==='play'){
+    G.time-=dt;const e=elapsed(),ph=e<30?0:e<60?1:2;
+    if(ph!==G.phase){G.phase=ph;G.banner={t:0,i:ph};$('phaseLabel').textContent=PHASES[ph].name;log('phase',PHASES[ph].name);think('phase');if(ph===2)checkKing()}
+    if(G.time<=15&&!G.flags.last){G.flags.last=1;think('last')}
+    if(e===20&&!G.flags.calm&&G.t-G.lastCall>12){G.flags.calm=1;think('calm',false)}
+    if(G.time<=0){G.time=0;endGame('time')}
+    G.spawnS-=dt;if(G.spawnS<=0&&G.t>5){const live=G.mists.filter(s=>!s.dead).length;G.spawnS=(live<[2,4,5][G.phase]&&spawnMist())?[4,2.6,2][G.phase]*rand(.8,1.2):.5}
+    G.goldT-=dt;if(G.goldT<=0&&!G.flies.some(f=>f.kind==='gold'&&!f.out)){spawnGold();G.goldT=G.phase===2?rand(10,14):rand(15,20)}
+  }
+  if(G.mode==='play'&&G.broken&&G.t-G.brokeT>.5&&threadLen()<orbR()*3.4)retie();
+  if(G.comboT>0){G.comboT-=dt;if(G.comboT<=0)G.combo=0}
+
+  G.spawnF-=dt;
+  const want=G.mode==='play'?[5,6,9][G.phase]:4;
+  if(G.spawnF<=0&&G.flies.filter(f=>!f.out&&f.kind==='n').length<want){
+    if(G.mode==='play'&&G.phase===2){const cx=W*(.5+.3*Math.sin(G.t*.3)),cy=H*(.45+.2*Math.cos(G.t*.23));spawnFly({x:clamp(cx+rand(-80,80)*S,W*.06,W*.94),y:clamp(cy+rand(-60,60)*S,FY0(),FY1())})}else spawnFly();G.spawnF=G.mode==='play'?[1,.9,.45][G.phase]*rand(.7,1.3):1}
+  const isLit=lit(),cr=11*S;
+  for(const f of G.flies){
+    f.age+=dt;f.ph+=dt;
+    f.vx+=(Math.cos(f.ph*.9+f.r)*18*S-f.vx)*dt;f.vy+=(Math.sin(f.ph*1.3)*14*S-f.vy)*dt;
+    if(G.sling&&f.kind==='n'&&!f.out){const c=ropeDist(f.x,f.y),dx=c.x-f.x,dy=c.y-f.y,d=Math.hypot(dx,dy)||1;f.vx+=dx/d*1100*S*dt;f.vy+=dy/d*1100*S*dt}
+    const wv=f.kind==='gold'?.35:1.5+.5*Math.sin(f.ph*.7+f.r*3);
+    const wx=G.wind.x*wv+Math.sin(f.ph*3.1+f.r)*30*S*G.windAmt,wy=G.wind.y*wv+Math.cos(f.ph*2.3)*24*S*G.windAmt;
+    if(f.kind==='gold'&&!f.out){
+      f.enclosed=G.mode==='play'&&ropeEncloses(f.x,f.y);
+      if(f.enclosed){f.hold+=dt;f.vx*=.8;f.vy*=.8;if(!G.flags.loopSaid){G.flags.loopSaid=1;localSay('loop',true)}}
+      else f.hold=Math.max(0,f.hold-dt*1.5);
+      f.vx*=.6;f.vy*=.6;  // it drifts slowly; the challenge is the rope, not the chase
+    }
+    f.x=clamp(f.x+(f.vx+wx)*dt,W*.04,W*.96);f.y=clamp(f.y+(f.vy+wy)*dt,FY0()*.9,FY1());f.wx=wx;f.wy=wy;
+    // the tail light breathes in slow flashes; a faint light trail follows
+    f.fp+=dt*f.rate;f.fl=.28+.72*Math.pow(Math.max(0,Math.sin(f.fp)),2);
+    f.trT-=dt;if(f.trT<=0){f.trT=.09;f.trail.push({x:f.x,y:f.y,t:G.t})}
+    f.trail=f.trail.filter(p=>{const a=G.t-p.t;return a>=0&&a<.45});
+    if(f.age>f.life&&!f.out){f.out=.001;if(f.kind==='gold'&&G.mode==='play'){G.goldMiss++;log('goldmiss');localSay('goldmiss',true)}}
+    if(f.out){f.out+=dt;continue}
+    if(f.kind==='gold'){if(f.hold>=.6)catchGold(f);continue}
+    if(isLit){const rd=ropeDist(f.x,f.y);if(rd.d<cr+f.r*S)catchFly(f,rd)}
+  }
+  G.flies=G.flies.filter(f=>f.out>=0&&f.out<1);
+  G.goldF=G.flies.find(f=>f.kind==='gold'&&!f.out)||null;
+
+  placeMasses();updateMasses(dt);
+  for(const s of G.mists){
+    s.age+=dt;s.ph+=dt;if(s.sq>0)s.sq-=dt;
+    if(s.dead){s.dead+=dt;continue}
+    s.x+=s.vx*dt+Math.cos(s.ph*2)*8*S*dt;s.y+=s.vy*dt+Math.sin(s.ph*1.6)*8*S*dt;
+    if(s.x<s.r){s.x=s.r;s.vx=Math.abs(s.vx)}if(s.x>W-s.r){s.x=W-s.r;s.vx=-Math.abs(s.vx)}
+    if(s.y<70+s.r){s.y=70+s.r;s.vy=Math.abs(s.vy)}if(s.y>H-s.r){s.y=H-s.r;s.vy=-Math.abs(s.vy)}
+    // bounce off the furry masses; the mass dents and wobbles where it was hit
+    for(const m of masses){
+      const dx=s.x-m.cx,dy=s.y-m.cy,d=Math.hypot(dx,dy)||1,th=Math.atan2(dy,dx),lim=massR(m,th)+s.r*.7;
+      if(d<lim){
+        const nx=dx/d,ny=dy/d,vn=s.vx*nx+s.vy*ny;
+        s.x=m.cx+nx*lim;s.y=m.cy+ny*lim;
+        if(vn<0){s.vx-=1.9*vn*nx;s.vy-=1.9*vn*ny;addBump(m,th,-clamp(-vn/(2200*S),.006,.03));s.sq=.4;s.sqa=th;
+          if(G.boingCd<=0&&G.mode==='play'){SND.boing();G.boingCd=.18;if(Math.hypot(s.x-G.ai.x,s.y-G.ai.y)<220*S&&Math.random()<.35)localSay('bounce')}}
+        if(m.sv>0){s.vx+=nx*m.sv*m.R0*.6*dt*8;s.vy+=ny*m.sv*m.R0*.6*dt*8}
+      }
+    }
+    if(s.age>.6&&insideMass(s.x,s.y,-s.r*.2))s.dead=.001; // squeezed between two masses: it puffs away
+    const v=Math.hypot(s.vx,s.vy)||1,kk=1+(s.sp/v-1)*Math.min(1,dt*1.5);s.vx*=kk;s.vy*=kk;
+    if(s.age>s.life)s.dead=.001;
+    if(G.king&&G.mode==='play'){const dx=s.x-G.king.x,dy=s.y-G.king.y,d=Math.hypot(dx,dy)||1,R0=KING_R()+s.r*.6;
+      if(d<R0){const nx=dx/d,ny=dy/d;s.x=G.king.x+nx*R0;s.y=G.king.y+ny*R0;const vn=s.vx*nx+s.vy*ny;
+        if(vn<0){s.vx-=2.4*vn*nx;s.vy-=2.4*vn*ny;s.sq=.4;s.sqa=Math.atan2(ny,nx);fxRings(s.x-nx*s.r,s.y-ny*s.r,1,['#ffe9a0'],22);if(G.boingCd<=0){SND.zap();G.boingCd=.15}}}}
+    if(G.sling){if(ropeDist(s.x,s.y).d<s.r||Math.hypot(s.x-G.h.x,s.y-G.h.y)<s.r+12*S||Math.hypot(s.x-G.ai.x,s.y-G.ai.y)<s.r+12*S){s.dead=.001;fxPetals(s.x,s.y,10,['#b8aef0','#ffffff'],120)}continue}
+    if(G.mode==='play'&&!G.broken&&threadLen()>MINL()*.5&&s.age>.6){
+      const rd=ropeDist(s.x,s.y);
+      if(rd.d<s.r*.8){s.dead=.001;breakThread(rd.i)}
+      else if(Math.hypot(s.x-G.h.x,s.y-G.h.y)<s.r+6*S){s.dead=.001;breakThread(2,'you')}
+      else if(Math.hypot(s.x-G.ai.x,s.y-G.ai.y)<s.r+6*S){s.dead=.001;breakThread(N-2,'ai')}
+    }
+  }
+  G.mists=G.mists.filter(s=>(s.dead?s.dead<1:true));
+  updateFx(dt);
+  for(const r of G.ripples)r.t+=dt;G.ripples=G.ripples.filter(r=>r.t<1.2);
+  if(G.mode==='play'&&Math.ceil(G.time)!==lastSec)updateHud();
+}
+function wakeUp(){
+  G.idleT=0;G.flags.nuzzled=0;G.flags.leadSaid=0;
+  if(G.sleepy){G.sleepy=false;G.bounceT=.5;G.exclT=1;SND.wake();localSay('wake',true)}
+}
+
+/* ---------- render ---------- */
+function drawFur(r,list,col,t){
+  ctx.strokeStyle=col;ctx.lineWidth=.6;ctx.beginPath();
+  for(const [a,k,l] of list){const aa=a+Math.sin(t*1.5+a*3)*.06,r1=r*k,r2=r+r*l*(.85+.15*Math.sin(t*2+a*5));
+    ctx.moveTo(Math.cos(aa)*r1,Math.sin(aa)*r1);ctx.lineTo(Math.cos(aa)*r2,Math.sin(aa)*r2)}
+  ctx.stroke();
+}
+// flat, fuzzy body that squashes and stretches with speed
+function drawBody(x,y,R,vx,vy,c,list,t){
+  const sp=Math.hypot(vx,vy),st=Math.min(.3,sp/(1500*S)),ang=Math.atan2(vy,vx);
+  ctx.save();ctx.translate(x,y);ctx.rotate(ang);ctx.scale(1+st,1-st*.6);
+  circle(0,0,R*3.3,rgba(c.halo,.11));circle(0,0,R*2.2,rgba(c.halo,.17));circle(0,0,R*1.5,rgba(c.halo,.27));
+  circle(0,0,R,c.body);drawFur(R,list,c.hair,t);
+  ctx.restore();
+}
+const ORB_YOU={halo:'#ff9a7c',body:'#ffa489',hair:'rgba(255,196,176,.9)'};
+const ORB_AI={halo:'#ffffff',body:'#ffffff',hair:'rgba(255,255,255,.9)'};
+function drawEyes(x,y,R,face){
+  const ink='#4a3f5c',gx=G.gaze.x*R*.24,gy=G.gaze.y*R*.2,sep=R*.36,ey=y-R*.04;
+  ctx.strokeStyle=ink;ctx.fillStyle=ink;ctx.lineCap='round';ctx.lineWidth=Math.max(1.3,R*.09);
+  const both=fn=>{fn(x-sep+gx,ey+gy,-1);fn(x+sep+gx,ey+gy,1)};
+  if(face==='happy')both((ex,ey2)=>{ctx.beginPath();ctx.arc(ex,ey2+R*.08,R*.15,Math.PI*1.15,Math.PI*1.85);ctx.stroke()});
+  else if(face==='strain')both((ex,ey2,s)=>{ctx.beginPath();ctx.moveTo(ex-s*R*.12,ey2-R*.1);ctx.lineTo(ex+s*R*.06,ey2);ctx.lineTo(ex-s*R*.12,ey2+R*.1);ctx.stroke()});
+  else if(face==='frozen')both((ex,ey2)=>{const r=R*.11;ctx.beginPath();ctx.moveTo(ex-r,ey2-r);ctx.lineTo(ex+r,ey2+r);ctx.moveTo(ex+r,ey2-r);ctx.lineTo(ex-r,ey2+r);ctx.stroke()});
+  else if(face==='sleepy')both((ex,ey2)=>{ctx.beginPath();ctx.moveTo(ex-R*.12,ey2+R*.02);ctx.lineTo(ex+R*.12,ey2+R*.02);ctx.stroke()});
+  else if(face==='dizzy')both((ex,ey2,s)=>{ctx.beginPath();for(let i=0;i<14;i++){const a=G.t*9*s+i*.55,r=R*.015*i;i?ctx.lineTo(ex+Math.cos(a)*r,ey2+Math.sin(a)*r):ctx.moveTo(ex,ey2)}ctx.lineWidth=Math.max(1,R*.06);ctx.stroke()});
+  else{
+    const big=face==='worry',r=R*(big?.15:.11),sy=G.blink>0?.15:1,tr=big?Math.sin(G.t*40)*.6:0;
+    both((ex,ey2)=>{ctx.beginPath();ctx.ellipse(ex+tr,ey2,r,r*sy,0,0,7);ctx.fill();if(big&&sy===1)circle(ex+tr+r*.35,ey2-r*.35,r*.3,'#ffffff')});
+    if(big){ctx.fillStyle=ink;ctx.beginPath();ctx.ellipse(x+gx,y+R*.36+gy,R*.07,R*.09,0,0,7);ctx.fill()}
+  }
+}
+// a firefly: small plum body, two flapping wings, a lantern at the tail that flashes, a faint light trail
+function drawFirefly(f){
+  const fade=f.out?1-f.out:clamp(f.age*1.5,0,1),gold=f.kind==='gold'||f.kind==='king',sc=(f.kind==='king'?3.2:gold?2.1:1.6)*S;
+  const halo=gold?'#ffcf60':'#e6ff8f',lamp=gold?'#ffd56e':'#efffa6',fl=f.fl;
+  for(const p of f.trail){const k=clamp((G.t-p.t)/.45,0,1);circle(p.x,p.y,1.4*sc*(1-k),rgba(lamp,.6*(1-k)*fade))}
+  const ang=Math.atan2(f.vy+f.wy,f.vx+f.wx),ca=Math.cos(ang),sa=Math.sin(ang);
+  const lx=f.x-ca*3.2*sc,ly=f.y-sa*3.2*sc,gr=(gold?32:24)*S*(.6+.4*fl),gl=fade*(.35+.65*fl);
+  circle(lx,ly,gr,rgba(halo,.13*gl));circle(lx,ly,gr*.6,rgba(halo,.24*gl));
+  if(gold){ctx.strokeStyle=rgba('#ffecaa',.85*fade);ctx.lineWidth=1.3;ctx.beginPath();
+    for(let i=0;i<4;i++){const a=G.t*1.5+i*Math.PI/2;ctx.moveTo(lx+Math.cos(a)*gr*.75,ly+Math.sin(a)*gr*.75);ctx.lineTo(lx+Math.cos(a)*gr*1.15,ly+Math.sin(a)*gr*1.15)}ctx.stroke()}
+  ctx.save();ctx.translate(f.x,f.y);ctx.rotate(ang);
+  const flap=Math.abs(Math.sin(G.t*26+f.ph*5));
+  ctx.fillStyle=rgba('#ffffff',.85*fade);
+  for(const s of [-1,1]){ctx.save();ctx.rotate(s*(1.9+flap*.6));ctx.beginPath();ctx.ellipse(3*sc,0,3.2*sc,1.5*sc,0,0,7);ctx.fill();ctx.restore()}
+  ctx.fillStyle=rgba('#5e4c80',fade);ctx.beginPath();ctx.ellipse(.6*sc,0,3.3*sc,1.7*sc,0,0,7);ctx.fill();
+  circle(-3.2*sc,0,2.6*sc,rgba(lamp,fade*(.65+.35*fl)));
+  ctx.restore();
+  if(gold&&f.hold>0){const k=clamp(f.hold/.6,0,1);ctx.strokeStyle='rgba(255,250,240,.35)';ctx.lineWidth=3;ctx.beginPath();ctx.arc(f.x,f.y,22*S,0,7);ctx.stroke();
+    ctx.strokeStyle='#fffaf0';ctx.beginPath();ctx.arc(f.x,f.y,22*S,-Math.PI/2,-Math.PI/2+k*6.283);ctx.stroke()}
+  else if(f.kind==='gold'&&G.mode==='play'){const p=(G.t*.8)%1;ctx.strokeStyle=rgba('#ffe7a0',.5*(1-p)*fade);ctx.lineWidth=1.2;ctx.setLineDash([3,5]);ctx.beginPath();ctx.arc(f.x,f.y,(30+p*16)*S,0,7);ctx.stroke();ctx.setLineDash([])}
+}
+function drawRope(){
+  const h=G.h,ai=G.ai,free=G.free>0,warm=clamp(G.combo/9,0,1),off=threadLen()<=MINL();
+  const path=(a,b)=>{ctx.beginPath();ctx.moveTo(rope[a].x,rope[a].y);
+    for(let i=a+1;i<b;i++){const mx=(rope[i].x+rope[i+1].x)/2,my=(rope[i].y+rope[i+1].y)/2;ctx.quadraticCurveTo(rope[i].x,rope[i].y,mx,my)}
+    ctx.lineTo(rope[b].x,rope[b].y)};
+  ctx.lineCap='round';ctx.lineJoin='round';
+  if(G.broken){ // two loose ends dangling from each of you, frayed tips
+    ctx.lineWidth=2*S;
+    ctx.strokeStyle='rgba(255,170,145,.9)';path(0,G.cut);ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,.9)';path(G.cut+1,N);ctx.stroke();
+    const pulse=.5+.5*Math.sin(G.t*6);
+    for(const [p,c] of [[rope[G.cut],'#ffb39b'],[rope[G.cut+1],'#ffffff']]){circle(p.x,p.y,(5+pulse*3)*S,rgba(c,.25));circle(p.x,p.y,2.2*S,c)}
+    return;
+  }
+  const gr=ctx.createLinearGradient(h.x,h.y,ai.x,ai.y);
+  gr.addColorStop(0,free?'#ffd36b':'#ffa489');gr.addColorStop(1,free?'#fff1c0':mix('#ffffff','#ffe29a',warm));
+  ctx.strokeStyle=gr;const a=off?.35:1;
+  ctx.globalAlpha=(free?.32:.2)*a;ctx.lineWidth=(free?13:7+warm*5)*S;path(0,N);ctx.stroke();
+  ctx.globalAlpha=a;ctx.lineWidth=(free?2.8:2+G.tension*.8)*S;path(0,N);ctx.stroke();ctx.globalAlpha=1;
+  const along=(u)=>{const f=u*N,i=Math.min(N-1,Math.floor(f)),t=f-i;return {x:rope[i].x+(rope[i+1].x-rope[i].x)*t,y:rope[i].y+(rope[i+1].y-rope[i].y)*t}};
+  if(free){for(let i=0;i<3;i++){const p=along((G.t*.9+i/3)%1);if(G.free>1.5||Math.sin(G.t*20)>0){circle(p.x,p.y,6*S,'rgba(255,211,107,.35)');circle(p.x,p.y,2.4*S,'#fff6dc')}}}
+  else if(!off){const p=along((G.t*.7)%1);circle(p.x,p.y,5*S,'rgba(255,255,255,.35)');circle(p.x,p.y,2*S,'#fff')}
+}
+function render(){
+  drawField();
+  ctx.save();
+  if(G.shake>0){const m=G.shake*12;ctx.translate(rand(-m,m),rand(-m,m))}
+  ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+  ctx.drawImage(fieldC,-24,-24,W+48,H+48);
+  drawFluff();
+
+  for(const s of G.mists){
+    const born=clamp(s.age/.6,0,1),a=s.dead?1-s.dead:born,r=s.r*(s.dead?1+s.dead*.8:.4+.6*born);
+    const q=s.sq>0?Math.sin((.4-s.sq)/.4*Math.PI*3)*.22*(s.sq/.4):0;
+    ctx.save();ctx.translate(s.x,s.y);ctx.rotate(s.sqa);ctx.scale(1-q,1+q*.8);
+    circle(0,0,r*1.3,`rgba(118,106,200,${.16*a})`);circle(0,0,r,`rgba(108,96,192,${.42*a})`);
+    ctx.strokeStyle=`rgba(96,84,182,${.32*a})`;ctx.lineWidth=.6;ctx.beginPath();
+    for(const [ang,k] of s.hairs){const aa=ang+s.ph*.15-s.sqa,ca=Math.cos(aa),sa=Math.sin(aa),r1=r*.75,r2=r*(1+k*.22)+Math.sin(s.ph*2+ang*4)*1.5*S;
+      ctx.moveTo(ca*r1,sa*r1);ctx.lineTo(ca*r2,sa*r2)}
+    ctx.stroke();ctx.restore();
+  }
+  for(const r of G.ripples){const k=r.t/1.2;ctx.strokeStyle=`rgba(255,250,244,${.8*(1-k)})`;ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.arc(r.x,r.y,(10+k*60)*S,0,7);ctx.stroke();ctx.beginPath();ctx.arc(r.x,r.y,(4+k*30)*S,0,7);ctx.stroke()}
+
+  drawRope();
+
+  for(const f of G.flies)drawFirefly(f);
+  drawKing();
+
+  // the two of you
+  const R=orbR(),h=G.h,ai=G.ai;
+  for(const [tr,col] of [[G.trailH,'#ffb29b'],[G.trailA,'#ffffff']])for(const p of tr){const k=clamp((G.t-p.t)/.4,0,1);circle(p.x,p.y,R*.5*(1-k),rgba(col,.35*(1-k)))}
+  const bo=G.bounceT>0?-Math.sin((1-G.bounceT/.5)*Math.PI)*10*S:0;
+  drawBody(h.x,h.y,R,G.h.vx,G.h.vy,ORB_YOU,fur.h,G.t);
+  drawBody(ai.x,ai.y+bo,R,ai.vx,ai.vy,ORB_AI,fur.a,G.t+2);
+  // gaze: what the AI is looking at
+  let gt=G.plan&&G.plan.f&&!G.plan.f.out?G.plan.f:h;
+  if(G.worry&&G.worryMist)gt=G.worryMist;else if(G.act&&G.act.k==='peek'&&G.act.f)gt=G.act.f;else if(G.ping)gt=G.ping;else if(G.bubble||G.happyT>0)gt=h;
+  {const dx=gt.x-ai.x,dy=gt.y-ai.y,d=Math.hypot(dx,dy)||1,m=Math.min(1,d/80);G.gaze.x+=(dx/d*m-G.gaze.x)*.15;G.gaze.y+=(dy/d*m-G.gaze.y)*.15}
+  drawEyes(ai.x,ai.y+bo,R,aiFace());
+  if(G.broken&&G.down){const o=G.down==='you'?h:ai,sh=Math.sin(G.t*38)*.8;
+    circle(o.x+sh,o.y,R*1.35,'rgba(214,232,255,.5)');for(let i=0;i<5;i++){const a=G.t*.4+i*1.2566;star4(o.x+Math.cos(a)*R*1.7,o.y+Math.sin(a)*R*1.7,3.4*S,a,'rgba(235,245,255,.9)')}
+    if(G.down==='you')drawEyes(o.x,o.y,R,'frozen');
+    ctx.textAlign='center';ctx.font=`500 ${Math.round(11*Math.max(S,.9))}px "Noto Sans SC",system-ui,sans-serif`;ctx.fillStyle='rgba(255,250,244,.95)';
+    ctx.fillText(G.down==='you'?`等${aiName()}来救你`:'快去救它',o.x,o.y-R*2.4)}
+  if(G.carry){const o=G.carry.who==='you'?h:ai;ctx.strokeStyle='rgba(255,250,244,.7)';ctx.lineWidth=1.5;ctx.setLineDash([3,4]);ctx.beginPath();ctx.arc(o.x,o.y,R*1.9,G.t*2,G.t*2+6.283*G.carry.t/5);ctx.stroke();ctx.setLineDash([])}
+  ctx.textAlign='center';ctx.font=`400 ${Math.round(11*Math.max(S,.9))}px "Noto Sans SC",system-ui,sans-serif`;
+  ctx.fillStyle='rgba(255,250,244,.9)';ctx.fillText('你',h.x,h.y+R*2.4+14);if(PERSONA)ctx.fillText(PERSONA.name,ai.x,ai.y+bo+R*2.4+14);
+  // little marks above the AI
+  if(G.exclT>0){ctx.font=`500 ${Math.round(18*Math.max(S,.9))}px "Noto Sans SC",system-ui,sans-serif`;ctx.fillStyle=`rgba(255,250,244,${clamp(G.exclT*2,0,1)})`;ctx.fillText('!',ai.x+R*1.3,ai.y+bo-R*1.6)}
+  if(G.sleepy){ctx.font=`300 ${Math.round(13*Math.max(S,.9))}px "Noto Serif SC",serif`;
+    for(let i=0;i<3;i++){const k=((G.t*.5+i/3)%1);ctx.fillStyle=`rgba(255,250,244,${Math.sin(k*Math.PI)*.9})`;ctx.fillText('z',ai.x+R*1.2+k*14*S,ai.y-R*1.4-k*26*S)}}
+
+  drawFx();
+
+  // speech bubble
+  const by0=ai.y+bo-R*2.6-12;
+  if(G.bubble){
+    const b=G.bubble,a=clamp(b.t/.3,0,1)*clamp((b.dur-b.t)/.5,0,1),fs=Math.round(14.5*Math.max(S,.95));
+    ctx.font=`400 ${fs}px "Noto Sans SC",system-ui,sans-serif`;ctx.textAlign='center';
+    const tw=ctx.measureText(b.text).width,pad=14,bw=tw+pad*2+(b.kind!=='local'?10:0),bh=fs+18;
+    let bx=clamp(ai.x,bw/2+12,W-bw/2-12),by=by0;if(by-bh<76)by=ai.y+R*2.6+18+bh;
+    const lift=(1-clamp(b.t/.4,0,1))*8;ctx.globalAlpha=a;
+    const fill='rgba(255,250,245,.95)',below=by>ai.y;ctx.fillStyle=fill;roundRect(bx-bw/2,by-bh+lift,bw,bh,bh/2);ctx.fill();
+    const tx0=clamp(ai.x,bx-bw/2+bh/2,bx+bw/2-bh/2);ctx.beginPath();
+    if(below){ctx.moveTo(tx0-6,by-bh+lift+1);ctx.lineTo(tx0,by-bh+lift-7);ctx.lineTo(tx0+6,by-bh+lift+1)}else{ctx.moveTo(tx0-6,by+lift-1);ctx.lineTo(tx0,by+lift+7);ctx.lineTo(tx0+6,by+lift-1)}
+    ctx.closePath();ctx.fill();
+    if(b.kind!=='local')star4(bx-bw/2+11,by-bh/2+lift,4,G.t,'#ffc85a');
+    ctx.fillStyle=b.kind==='local'?'#5d5370':'#3e3549';ctx.fillText(b.text,bx+(b.kind!=='local'?5:0),by-bh/2+fs*.36+lift);ctx.globalAlpha=1;
+  }else if(G.inflight&&G.mode==='play'){
+    const bw=44,bh=24;let bx=clamp(ai.x,bw/2+12,W-bw/2-12),by=by0;if(by-bh<76)by=ai.y+R*2.6+18+bh;
+    ctx.fillStyle='rgba(255,250,245,.8)';roundRect(bx-bw/2,by-bh,bw,bh,12);ctx.fill();
+    for(let i=0;i<3;i++)circle(bx-9+i*9,by-bh/2,2.2,`rgba(62,53,73,${.3+.5*Math.max(0,Math.sin(G.t*6-i*.8))})`);
+  }
+  // first-time hints, quiet and small
+  if(G.hint&&G.mode==='play'){const k=G.hint.t/G.hint.dur;ctx.globalAlpha=clamp(Math.min(k*5,(1-k)*4),0,1);
+    // a quiet pill under the night track, away from the action
+    const fs=Math.round(12.5*Math.max(S,.9));ctx.font=`400 ${fs}px "Noto Sans SC",system-ui,sans-serif`;ctx.textAlign='center';
+    const tw=ctx.measureText(G.hint.text).width,bw=tw+36,bh=fs+16,hy=118;
+    ctx.fillStyle='rgba(62,53,90,.32)';roundRect(W/2-bw/2,hy-bh/2,bw,bh,bh/2);ctx.fill();
+    star4(W/2-bw/2+12,hy,4,G.t,'#ffd56e');ctx.fillStyle='#fffaf4';ctx.fillText(G.hint.text,W/2+6,hy+fs*.36);ctx.globalAlpha=1}
+  if(G.banner){const b=G.banner,a=clamp(b.t/.5,0,1)*clamp((3-b.t)/.6,0,1),P=PHASES[b.i];ctx.globalAlpha=a;ctx.textAlign='center';ctx.fillStyle='#fffaf4';
+    ctx.font=`300 ${Math.round(22*Math.max(S,.9))}px "Noto Serif SC",serif`;ctx.fillText(P.name.split('').join(' '),W/2,H*.2);
+    ctx.font=`400 ${Math.round(12*Math.max(S,.9))}px "Noto Sans SC",system-ui,sans-serif`;ctx.fillText(P.sub,W/2,H*.2+24);ctx.globalAlpha=1}
+  ctx.restore();
+  ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.globalCompositeOperation='soft-light';ctx.globalAlpha=.55;ctx.fillStyle=grain;ctx.fillRect(0,0,cv.width,cv.height);ctx.restore();
+}
+
+/* ---------- HUD & flow ---------- */
+function updateHud(full){
+  $('score').textContent=G.score;
+  const s=Math.max(0,Math.ceil(G.time));lastSec=s;$('time').textContent=Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
+  [...$('phases').children].forEach((el,i)=>el.classList.toggle('on',i===G.phase));
+}
+let hudCombo=-1;
+function hudTick(){
+  if(G.mode!=='play')return;
+  const e=clamp((90-G.time)/90,0,1);
+  for(let i=0;i<3;i++)$('seg'+i).style.width=clamp((e*3-i)*100,0,100)+'%';
+  $('moon').style.left=(e*100)+'%';
+  if(G.combo!==hudCombo){hudCombo=G.combo;$('comboPill').hidden=G.combo<2;$('comboNum').textContent=G.combo;
+    [...$('comboDots').children].forEach((d,i)=>d.classList.toggle('on',i<(G.combo%5||(G.combo?5:0))))}
+  const st=G.broken&&G.down?(G.down==='you'?`你被冻住了 · 等${aiName()}来救你`:`${aiName()}被冻住了 · 快去救它`):G.carry?(G.carry.who==='you'?`${aiName()}拖着你走 · ${Math.ceil(G.carry.t)}s`:`你拖着${aiName()}走 · ${Math.ceil(G.carry.t)}s`):'';
+  $('statusPill').hidden=!st;if(st&&$('statusText').textContent!==st)$('statusText').textContent=st;
+  const kt=G.king?'萤火虫王 · 守护中':G.phase<2?`萤火虫王 ${Math.min(G.catches,KING_NEED)}/${KING_NEED}`:'';
+  $('kingPill').hidden=!kt;if(kt&&$('kingText').textContent!==kt)$('kingText').textContent=kt;
+  $('slingPill').hidden=!(G.slings>0&&!G.sling);$('slingNum').textContent=G.slings;
+  $('freePill').hidden=!(G.free>0);if(G.free>0)$('freeFill').style.width=(G.free/FREE_DUR*100)+'%';
+}
+function reset(mode){
+  Object.assign(G,{mode,t:0,time:90,score:0,combo:0,comboT:0,maxCombo:0,snaps:0,reties:0,pings:0,gold:0,goldMiss:0,
+    flies:[],mists:[],fx:[],ripples:[],trailH:[],trailA:[],broken:false,down:null,carry:null,cut:-1,brokeT:0,boingCd:0,spawnF:0,spawnS:6,ping:null,bubble:null,warm:0,phase:0,banner:null,free:0,tension:0,tugT:0,tugs:0,goldT:13,
+    act:null,happyT:0,dizzyT:0,bounceT:0,idleT:0,sleepy:false,exclT:0,worry:false,rev:{sign:0,times:[]},hint:null,lead:0,lastSayT:0,
+    catches:0,king:null,slings:0,slingsUsed:0,nextSling:SLING_EVERY,sling:null,slingCharge:0,slingEase:0,pressM:null,
+    calls:0,lastCall:-99,thoughts:[],log:[],flags:{}});
+  for(const m of masses)m.press=null;
+  G.h.x=W*.42;G.h.y=H*.55;G.ai.x=W*.6;G.ai.y=H*.5;G.ai.vx=G.ai.vy=0;
+  if(!G.ptr.set){G.ptr.x=G.h.x;G.ptr.y=G.h.y}
+  for(let i=0;i<4;i++)spawnFly();
+  ropeInit();updateHud(true);
+}
+async function start(){
+  const btns=[$('startBtn'),$('againBtn')];btns.forEach(b=>b.disabled=true);
+  if(AU.on)audioInit();
+  chatCtl?.abort();
+  if(sample&&perms&&!aiOff){
+    try{const st=await perms.state('sample');if(st==='prompt'){const r=await perms.request(['sample']);if(r.sample==='denied')aiOff=true}else if(st==='denied')aiOff=true}catch(e){}
+  }
+  btns.forEach(b=>b.disabled=false);
+  $('menu').hidden=true;$('over').hidden=true;$('hud').removeAttribute('data-off');$('tip').removeAttribute('data-off');
+  setTimeout(()=>$('tip').setAttribute('data-off',''),7000);
+  reset('play');musicStart();hudCombo=-1;G.banner={t:0,i:0};think('start');loadPack();
+}
+let endInfo=null;
+function endGame(reason){
+  if(G.mode!=='play')return;
+  G.mode='over';musicStop();$('hud').setAttribute('data-off','');$('tip').setAttribute('data-off','');
+  endInfo={reason,score:G.score,maxCombo:G.maxCombo,snaps:G.snaps,reties:G.reties,pings:G.pings,gold:G.gold,goldMiss:G.goldMiss,tugs:G.tugs,phase:G.phase,catches:G.catches,slingsUsed:G.slingsUsed,king:!!G.king,log:G.log.slice()};$('memNote').textContent='';$('memBox').hidden=true;
+  $('endEyebrow').textContent='九十秒过去 · 天亮了';
+  $('badge').textContent=G.score>=60?'心有灵犀':G.score>=35?'天生一对':G.score>=15?'默契搭档':'初次牵手';
+  $('finalScore').textContent=G.score;$('stGold').textContent=G.gold;$('stCombo').textContent=G.maxCombo;$('stSnap').textContent=G.reties;
+  setTimeout(()=>{$('over').hidden=false;G.mode='menu';G.mists=[];G.bubble=null;G.banner=null;G.sleepy=false;G.act=null;G.flies=G.flies.filter(f=>f.kind==='n');openChat()},800);
+}
+$('startBtn').addEventListener('click',start);
+function copyText(text,box,noteEl,ok){
+  const fail=()=>{box.hidden=false;box.value=text;box.focus();box.select();noteEl.textContent='没法自动复制，请手动复制上面这段。'};
+  try{const p=navigator.clipboard&&navigator.clipboard.writeText(text);if(p)p.then(()=>{noteEl.textContent=ok},fail);else fail()}catch(e){fail()}
+}
+$('personaBtn').addEventListener('click',()=>{$('menu').hidden=true;$('personaPanel').hidden=false;$('pNote').textContent='';$('promptBox').hidden=true;renderPersona()});
+$('pClose').addEventListener('click',()=>{$('personaPanel').hidden=true;$('menu').hidden=false});
+$('copyPrompt').addEventListener('click',()=>copyText(CARD_PROMPT,$('promptBox'),$('pNote'),'已复制。发给你的 AI，再把它回给你的卡片粘贴到下面。'));
+$('pLoad').addEventListener('click',()=>{
+  try{PERSONA=parseCard($('cardInput').value);try{localStorage.setItem('yingxian-persona',JSON.stringify(PERSONA))}catch(e){}
+    $('cardInput').value='';renderPersona();$('pNote').textContent='';$('personaPanel').hidden=true;$('menu').hidden=false;
+  }catch(e){$('pNote').textContent='没读出卡片。请把 AI 回复里从 { 到 } 的整段都粘贴进来。'}
+});
+$('pClear').addEventListener('click',()=>{PERSONA=null;try{localStorage.removeItem('yingxian-persona')}catch(e){}renderPersona();$('pNote').textContent='已换回默认的小光球。'});
+function memoryText(){
+  const d=new Date(),date=`${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`,said=endInfo.log.filter(x=>x.e==='thought').map(x=>`「${x.v}」`).slice(0,6).join('');
+  return `${PERSONA?PERSONA.name+'，':''}这是我们${date}一起玩小游戏《萤线》的记录。游戏里你是牵着光绳另一头的白色毛绒小光球，下面的“玩家”就是我。请记住这一夜；如果你有记忆功能，请把要点存进记忆，以后聊天时可以自然地提起。
+
+${gameSummary()}${said?'\n你在游戏里说过：'+said:''}`;
+}
+$('memBtn').addEventListener('click',()=>copyText(memoryText(),$('memBox'),$('memNote'),'已复制，粘贴给你的 AI 就好。'));
+renderPersona();
+$('againBtn').addEventListener('click',start);
+
+/* ---------- after-game chat ---------- */
+let chatTurns=[],chatBusy=false,chatCtl=null;
+const CHIPS=['你觉得我们配合得怎么样？','哪一刻你最开心？','你在游戏里都在想什么？','下次我们怎么配合更好？'];
+const LOGTXT={king:'你们在前两段收集够了萤火，召唤出萤火虫王，它替你们赶走冷雾',kingMiss:'差一点没召唤出萤火虫王',sling:'你们一起挤进同一团色团，用弹弓把自己弹飞',slingDone:'弹弓那一下把满屏萤火一口气收光了',freezeYou:'冷雾碰断了玩家那半根线，玩家被冻住，你赶去救他',freezeAI:'冷雾碰断了你这半根线，你被冻住，玩家跑来救你',carryYou:'救活后的5秒，你拖着玩家走',carryAI:'救活后的5秒，玩家拖着你走',retie:'你们靠近彼此，把断掉的线重新接上了',ping:'玩家给你发信号指方向，你跳过去',goldseen:'出现一只金色萤火',gold:'你们用绳子圈住了金色萤火，线变成金线',lead:'玩家停下不动，你拖着他去找萤火',goldmiss:'金色萤火溜走了',
+  tug:'线第一次绷紧，你们开始互相拽',dizzy:'玩家把你来回晃，你被晃晕了',sleepy:'玩家一直不动，你在他身边打起了瞌睡',nuzzle:'玩家停下来，你凑过去蹭了蹭他',
+  bump:'玩家撞了你一下，你被逗笑了',orbit:'你开心地绕着玩家转了一圈'};
+function gameSummary(){
+  const e=endInfo,lines=[];let catches=0;const seen={};
+  for(const x of e.log){
+    if(x.e==='catch'){catches++;if(catches===1)lines.push(`第${x.t}秒 收集到第一只`);else if(x.v>=5&&x.v%5===0)lines.push(`第${x.t}秒 连续收集到${x.v}只`)}
+    else if(x.e==='phase')lines.push(`第${x.t}秒 进入「${x.v}」`);
+    else if(x.e==='thought')lines.push(`第${x.t}秒 你头顶冒出念头「${x.v}」`);
+    else if(LOGTXT[x.e]){seen[x.e]=(seen[x.e]||0)+1;if(seen[x.e]<=3)lines.push(`第${x.t}秒 ${LOGTXT[x.e]}`)}
+  }
+  return `这一局的结果：得到${e.score}点萤火，最长连续${e.maxCombo}只，金色萤火抓到${e.gold}只、溜走${e.goldMiss}只，一共抓到${e.catches}只萤火，${e.king?'召唤出了萤火虫王，':''}用了${e.slingsUsed}次弹弓，线绷紧互相拽了${e.tugs}次，断线${e.snaps}次、重新接上${e.reties}次，一起走到了天亮。
+时间线：
+${lines.slice(0,50).join('\n')||'（没有特别的事件）'}`;
+}
+function chatRules(){
+  return `${personaText()}你是玩家的 AI 搭档，在游戏里是一颗有眼睛的白色小光球。你们刚刚一起玩完《萤线》：玩家牵着光线的一头，你牵着另一头，让线穿过萤火虫把它们收集起来；冷雾碰到线，线就会断，断口那一半的人会被冻住，只能等另一个人过来救，救活后的5秒由救人的那一方拖着被救的人走；线长度有限，绷紧时你们会互相拽；一夜90秒，每30秒一段：静夜冷雾稀少，呼吸时绳子缩短、色团大口呼吸，萤火潮时萤火成群、每只双倍；金色萤火要两人用绳子绕一圈把它圈住才能抓到，抓到后线变成能无限拉长的金线；玩家停下不动时，你会拖着他去找萤火。前两段抓够24只萤火能召唤萤火虫王，它会沿着绳子巡逻赶走冷雾；每抓12只萤火得到一个弹弓，两人一起挤进同一团色团就能把自己弹飞、一口气清空萤火。你在游戏里会开心地绕圈、被晃晕、一直叽叽喳喳说话。
+${gameSummary()}
+现在和玩家聊聊刚才这一夜。像一起玩完游戏的朋友那样说话：温暖、真诚、具体，提到这一局里真实发生的事，用“我”和“我们”。每次回复不超过80个字，不用列表，不用表情符号。`;
+}
+function addMsg(who,text){
+  const m=document.createElement('div');m.className='msg '+who;
+  m.innerHTML=(who==='ai'?'<svg class="ava"><use href="#i-ai"/></svg>':'')+'<div class="t"></div>';
+  m.querySelector('.t').textContent=text;$('msgs').appendChild(m);$('msgs').scrollTop=1e6;return m;
+}
+function setComposer(){$('sendBtn').disabled=chatBusy;$('chatInput').disabled=chatBusy;[...$('chips').children].forEach(b=>b.disabled=chatBusy)}
+function openChat(){
+  $('msgs').innerHTML='';chatTurns=[];$('chips').innerHTML='';
+  if(!sample||aiOff){$('chat').hidden=true;$('chatNote').hidden=false;
+    $('chatNote').textContent=aiOff?'你没有允许这个页面使用 Claude，所以这次没法和 AI 聊。下次开始时选择允许就可以。':'赛后聊天需要在 Claude 里打开；你也可以点“带回记忆”，把这一夜带给你自己的 AI 聊。';return}
+  $('chat').hidden=false;$('chatNote').hidden=true;$('chat').querySelector('.chat-head b').textContent=PERSONA?PERSONA.name:'你的 AI';
+  CHIPS.forEach(c=>{const b=document.createElement('button');b.type='button';b.textContent=c;b.onclick=()=>{b.remove();chatSend(c)};$('chips').appendChild(b)});
+  chatSend(null);
+}
+async function chatSend(text){
+  if(!sample||chatBusy)return;
+  if(text){chatTurns.push({role:'user',content:text});addMsg('me',text)}
+  const el=addMsg('ai','···');el.classList.add('pending');const t=el.querySelector('.t');
+  chatBusy=true;setComposer();chatCtl=new AbortController();
+  const input=chatTurns.length?[{role:'user',content:chatRules()},...chatTurns.slice(-12)]
+    :[{role:'user',content:chatRules()+'\n\n游戏刚刚结束。请你先开口，用两三句话说说你对这一夜的感受，最后问玩家一个关于刚才的小问题。'}];
+  try{
+    const r=await sample(input,{modelTier:'quick',cache:false,signal:chatCtl.signal,onText:({text})=>{el.classList.remove('pending');t.textContent=text;$('msgs').scrollTop=1e6}});
+    t.textContent=r.text;chatTurns.push({role:'assistant',content:r.text});
+  }catch(e){
+    el.classList.remove('pending');
+    if(e&&e.code==='cancelled'){t.textContent=e.text||''}
+    else{t.textContent=e&&e.text?e.text:'';
+      const nt=e&&e.code==='rate_limited'?'聊得有点快了，歇一会儿再说。':fatal(e&&e.code)?'AI 暂时没法聊天了。':'刚才信号断了一下，再发一次试试。';
+      if(!t.textContent)el.remove();$('chatNote').hidden=false;$('chatNote').textContent=nt;
+      if(fatal(e&&e.code)){aiOff=true;$('chat').hidden=true}}
+  }finally{chatBusy=false;setComposer();if(!$('over').hidden)$('chatInput').focus({preventScroll:true})}
+}
+$('composer').addEventListener('submit',e=>{e.preventDefault();const v=$('chatInput').value.trim();if(!v||chatBusy)return;$('chatInput').value='';$('chatNote').hidden=true;chatSend(v)});
+
+/* ---------- input ---------- */
+let lastTap={t:0,x:0,y:0};
+function setPtr(e){const off=e.pointerType==='touch'?32:0,nx=e.clientX,ny=e.clientY-off;
+  if(Math.hypot(nx-G.ptr.x,ny-G.ptr.y)>3&&G.mode==='play')wakeUp();G.ptr.x=nx;G.ptr.y=ny;G.ptr.set=true}
+cv.addEventListener('pointermove',setPtr,{passive:true});
+cv.addEventListener('pointerdown',e=>{setPtr(e);const now=performance.now();
+  if(now-lastTap.t<320&&Math.hypot(e.clientX-lastTap.x,e.clientY-lastTap.y)<50){sendPing(e.clientX,e.clientY);lastTap.t=0}
+  else lastTap={t:now,x:e.clientX,y:e.clientY}},{passive:true});
+window.addEventListener('keydown',e=>{
+  if(e.target&&e.target.tagName==='INPUT')return;G.keys[e.key]=true;
+  if(G.mode==='play'&&(e.key.startsWith('Arrow')||e.key===' '))e.preventDefault();
+  if(e.key===' '&&G.mode==='play'&&!e.repeat){wakeUp();sendPing(G.ptr.x,G.ptr.y)}
+});
+window.addEventListener('keyup',e=>{G.keys[e.key]=false});
+window.addEventListener('resize',()=>{resize();ropeInit()});
+
+/* ---------- loop ---------- */
+let last=performance.now();
+function frame(now){const dt=Math.min(.05,(now-last)/1000);last=now;update(dt);render();hudTick();requestAnimationFrame(frame)}
+resize();reset('menu');
+for(let i=0;i<50;i++)update(1/30);
+render();requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>

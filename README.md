@@ -4,7 +4,7 @@
 
 在线试玩：<https://daoyi2026.github.io/firefly-line/>
 
-<img src="assets/cover.jpg" alt="萤线封面：毛绒色团之间，珊瑚色和白色两颗光球牵着一根光绳，周围飞着萤火虫" width="360">
+<img src="assets/cover.jpg" alt="萤线封面：标题“萤线”下，珊瑚色和白色两颗光球在毛绒色团之间牵着一根光绳，周围飞着萤火虫" width="360">
 
 ## 怎么玩
 

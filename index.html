@@ -449,7 +449,27 @@ const MASS_DEF=[
   {ax:1.1,ay:.9,r:.42,inner:'#f6a2ea',alt:'#ee90f2',edge:'#b736d8',a:.94,dep:.75},
   {ax:.46,ay:1.34,r:.56,inner:'#ffcf96',alt:'#ffb47c',edge:'#ff5a2a',a:.98,dep:1,warm:true}
 ];
-let masses=[];
+let masses=[],MOTES=[],BOKEH=[];
+function buildMotes(){
+  const C=['#fff6e2','#ffd8f2','#dcecff','#ffe9b8'];
+  MOTES=Array.from({length:Math.round(36+W*H/26000)},()=>({x:Math.random(),y:Math.random(),r:rand(.8,2.2),sp:rand(.006,.02),sw:rand(.004,.012),ph:rand(0,6.28),tw:rand(.6,1.6),c:pick(C),d:rand(.3,1)}));
+  BOKEH=Array.from({length:9},()=>({x:Math.random(),y:Math.random(),r:rand(14,46),sp:rand(.003,.008),ph:rand(0,6.28),c:pick(C),a:rand(.05,.1),d:rand(1.2,2.2)}));
+}
+function drawMotes(near){
+  const t=G.t,cx=(G.h.x-W/2),cy=(G.h.y-H/2);
+  ctx.save();ctx.globalCompositeOperation='screen';
+  if(!near){for(const m of MOTES){const y=((m.y-t*m.sp)%1+1)%1,x=m.x+Math.sin(t*.5+m.ph)*m.sw*4;
+      const tw=.35+.65*Math.max(0,Math.sin(t*m.tw*2+m.ph)),px=x*W-cx*.02*m.d,py=y*(H+40)-20-cy*.02*m.d;
+      circle(px,py,m.r*3.2*S,rgba(m.c,.12*tw));circle(px,py,m.r*S,rgba(m.c,.85*tw))}}
+  else{for(const b of BOKEH){const y=((b.y-t*b.sp)%1+1)%1,px=(b.x+Math.sin(t*.13+b.ph)*.03)*W-cx*.06*b.d,py=y*(H+160)-80-cy*.06*b.d,R=b.r*S*(1+.08*Math.sin(t*.7+b.ph));
+      circle(px,py,R,rgba(b.c,b.a));ctx.strokeStyle=rgba(b.c,b.a*.9);ctx.lineWidth=1;ctx.beginPath();ctx.arc(px,py,R*.94,0,7);ctx.stroke()}
+    // a slow band of light sweeping across, like a sheen on velvet
+    const u=((t/16)%1)*1.8-.4,g=ctx.createLinearGradient(0,0,W,H*.7);
+    const st=[[u-.12,0],[u,.13],[u+.12,0]];
+    if(u>-.12&&u<1.12){g.addColorStop(clamp(st[0][0],0,1),'rgba(255,240,250,0)');g.addColorStop(clamp(st[1][0],0,1),`rgba(255,240,250,${st[1][1]})`);g.addColorStop(clamp(st[2][0],0,1),'rgba(255,240,250,0)');
+      ctx.fillStyle=g;ctx.fillRect(0,0,W,H)}}
+  ctx.restore();
+}
 function buildFluff(){
   const L=Math.max(W,H);
   masses=MASS_DEF.map((d,i)=>{
@@ -505,6 +525,9 @@ function drawFluff(){
     const g=ctx.createRadialGradient(m.cx,m.cy-m.R*.15,m.R*.05,m.cx,m.cy,m.R*1.04);
     g.addColorStop(0,inner);g.addColorStop(.55,inner);g.addColorStop(1,edge);
     ctx.globalAlpha=m.a;ctx.fillStyle=g;massPath(m,0);ctx.fill();ctx.globalAlpha=1;
+    {const hx=m.cx-m.R*.32,hy=m.cy-m.R*.42,sh=ctx.createRadialGradient(hx,hy,0,hx,hy,m.R*.75);
+      sh.addColorStop(0,'rgba(255,250,255,.26)');sh.addColorStop(.5,'rgba(255,250,255,.08)');sh.addColorStop(1,'rgba(255,250,255,0)');
+      ctx.save();massPath(m,0);ctx.clip();ctx.fillStyle=sh;ctx.fillRect(hx-m.R*.8,hy-m.R*.8,m.R*1.6,m.R*1.6);ctx.restore()}
     // fur: fine hairs along the rim; they sway, lean with the wind, and part around you and the AI
     ctx.strokeStyle=mixA(m.edge,'#ffffff',.55,.7);ctx.lineWidth=.7;ctx.beginPath();
     for(const hr of m.hairs){
@@ -528,7 +551,7 @@ function resize(){
   cv.width=W*DPR;cv.height=H*DPR;cv.style.width=W+'px';cv.style.height=H+'px';
   ctx.setTransform(DPR,0,0,DPR,0,0);S=clamp(Math.min(W,H)/700,.6,1.3);
   if(grain===null)buildGrain();
-  buildFluff();
+  buildFluff();buildMotes();
 }
 
 /* ---------- state ---------- */
@@ -1205,17 +1228,50 @@ function render(){
   if(G.shake>0){const m=G.shake*12;ctx.translate(rand(-m,m),rand(-m,m))}
   ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
   ctx.drawImage(fieldC,-24,-24,W+48,H+48);
+  drawMotes(false);
   drawFluff();
+  drawMotes(true);
 
   for(const s of G.mists){
     const born=clamp(s.age/.6,0,1),a=s.dead?1-s.dead:born,r=s.r*(s.dead?1+s.dead*.8:.4+.6*born);
     const q=s.sq>0?Math.sin((.4-s.sq)/.4*Math.PI*3)*.22*(s.sq/.4):0;
-    ctx.save();ctx.translate(s.x,s.y);ctx.rotate(s.sqa);ctx.scale(1-q,1+q*.8);
-    circle(0,0,r*1.3,`rgba(104,40,190,${.18*a})`);circle(0,0,r,`rgba(92,34,176,${.5*a})`);
-    ctx.strokeStyle=`rgba(84,30,168,${.36*a})`;ctx.lineWidth=.6;ctx.beginPath();
-    for(const [ang,k] of s.hairs){const aa=ang+s.ph*.15-s.sqa,ca=Math.cos(aa),sa=Math.sin(aa),r1=r*.75,r2=r*(1+k*.22)+Math.sin(s.ph*2+ang*4)*1.5*S;
+    const hot=G.worry&&G.worryMist===s&&!s.dead,pulse=.5+.5*Math.sin(G.t*(hot?9:2.6)+s.ph);
+    ctx.save();ctx.translate(s.x,s.y);
+    // cold glow that lights up the warm fur around it
+    ctx.globalCompositeOperation='screen';
+    const ar=r*(1.9+pulse*.3+(hot?.45:0)),ag=ctx.createRadialGradient(0,0,r*.55,0,0,ar);
+    ag.addColorStop(0,`rgba(130,238,255,${(.5+(hot?.25:0))*a})`);ag.addColorStop(.42,`rgba(150,175,255,${.2*a})`);ag.addColorStop(1,'rgba(160,170,255,0)');
+    ctx.fillStyle=ag;ctx.beginPath();ctx.arc(0,0,ar,0,7);ctx.fill();
+    ctx.globalCompositeOperation='source-over';
+    // a pale frosty zone around it, so the danger area reads at a glance
+    const zr=r*(1.75+pulse*.15+(hot?.35:0)),zg=ctx.createRadialGradient(0,0,r*.9,0,0,zr);
+    zg.addColorStop(0,`rgba(214,236,255,${(.38+(hot?.2:0))*a})`);zg.addColorStop(.5,`rgba(196,206,255,${.14*a})`);zg.addColorStop(1,'rgba(196,206,255,0)');
+    ctx.fillStyle=zg;ctx.beginPath();ctx.arc(0,0,zr,0,7);ctx.fill();
+    ctx.rotate(s.sqa);ctx.scale(1-q,1+q*.8);ctx.rotate(-s.sqa);
+    // glassy body: clear in the middle, colour pooling toward the rim
+    const bg=ctx.createRadialGradient(-r*.28,-r*.32,r*.04,0,0,r);
+    bg.addColorStop(0,`rgba(240,252,255,${.42*a})`);bg.addColorStop(.5,`rgba(150,160,255,${.34*a})`);
+    bg.addColorStop(.84,`rgba(86,92,226,${.58*a})`);bg.addColorStop(1,`rgba(70,205,255,${.8*a})`);
+    ctx.fillStyle=bg;ctx.beginPath();ctx.arc(0,0,r,0,7);ctx.fill();
+    // frost hairs
+    ctx.strokeStyle=`rgba(214,248,255,${.75*a})`;ctx.lineWidth=.8;ctx.beginPath();
+    for(const [ang,k] of s.hairs){const aa=ang+s.ph*.15,ca=Math.cos(aa),sa=Math.sin(aa),r1=r*.86,r2=r*(1.04+k*.24)+Math.sin(s.ph*2+ang*4)*1.5*S;
       ctx.moveTo(ca*r1,sa*r1);ctx.lineTo(ca*r2,sa*r2)}
-    ctx.stroke();ctx.restore();
+    ctx.stroke();
+    // iridescent rim, slowly turning
+    let rim='#bff4ff';
+    if(ctx.createConicGradient){rim=ctx.createConicGradient(G.t*.9+s.ph,0,0);
+      ['#9ff6ff','#c6a6ff','#ffb0e4','#fff0b0','#9ff6ff'].forEach((c,i)=>rim.addColorStop(i/4,c))}
+    ctx.globalAlpha=a;ctx.strokeStyle=rim;ctx.lineWidth=(2.4+pulse*1+(hot?1:0))*S;ctx.beginPath();ctx.arc(0,0,r*.97,0,7);ctx.stroke();
+    // a glint like on a soap bubble
+    ctx.lineCap='round';ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=2.2*S;ctx.beginPath();ctx.arc(0,0,r*.68,Math.PI*1.08,Math.PI*1.4);ctx.stroke();
+    circle(r*.42,r*.36,1.8*S,'rgba(255,255,255,.75)');
+    ctx.globalAlpha=1;ctx.restore();
+    // ice motes circling it
+    for(let i=0;i<3;i++){const an=G.t*(.8+i*.25)*(i%2?-1:1)+s.ph+i*2.09,rr=r*(1.28+.1*Math.sin(G.t*2+i));
+      star4(s.x+Math.cos(an)*rr,s.y+Math.sin(an)*rr,(2.6+1.3*Math.sin(G.t*4+i*2+s.ph))*S,an,`rgba(228,252,255,${.9*a})`)}
+    // about to touch the line: rings ripple out as a warning
+    if(hot){for(const o of [0,.5]){const k=(G.t*1.4+o)%1;ctx.strokeStyle=`rgba(190,246,255,${.75*(1-k)})`;ctx.lineWidth=1.6*S;ctx.beginPath();ctx.arc(s.x,s.y,r*(1.1+k*1.1),0,7);ctx.stroke()}}
   }
   for(const r of G.ripples){const k=r.t/1.2;ctx.strokeStyle=`rgba(255,250,244,${.8*(1-k)})`;ctx.lineWidth=1.5;
     ctx.beginPath();ctx.arc(r.x,r.y,(10+k*60)*S,0,7);ctx.stroke();ctx.beginPath();ctx.arc(r.x,r.y,(4+k*30)*S,0,7);ctx.stroke()}

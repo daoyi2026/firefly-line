@@ -1406,7 +1406,12 @@ const RANKS=[
   {min:200,name:'默契搭档',desc:'不用开口，也知道对方要去哪。'},
   {min:320,name:'天生一对',desc:'这根线在我们之间，几乎没有绷紧过。'},
   {min:480,name:'心有灵犀',desc:'一个念头，两个人同时转弯。'},
-  {min:680,name:'星河同游',desc:'这一夜的光，差不多都被我们收进来了。'}];
+  {min:680,name:'星河同游',desc:'这一夜的光，差不多都被我们收进来了。'},
+  {min:800,name:'流萤成河',desc:'萤火在我们之间，汇成了一条河。'},
+  {min:1000,name:'千灯为证',desc:'一千点光，都记得我们牵着手。'},
+  {min:1500,name:'光年同行',desc:'走了这么远，线一次也没想过松开。'},
+  {min:1800,name:'群星共鸣',desc:'连天上的星星，都跟上了我们的节奏。'},
+  {min:2000,name:'一线永恒',desc:'这根线，大概会一直亮下去了。'}];
 const rankOf=sc=>{let r=RANKS[0];for(const x of RANKS)if(sc>=x.min)r=x;return r};
 function honors(e){const t=[];
   if(e.snaps===0)t.push('一次没断');else if(e.reties>=3)t.push('断了又牵');
